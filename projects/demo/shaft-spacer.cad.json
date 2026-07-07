@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "shaft-spacer",
+  "units": "mm",
+  "description": "Cylindrical spacer, 20 mm bore, 32 mm OD, 12 mm tall — revolve demo.",
+  "material": { "name": "Steel 1018", "density": 7.87 },
+  "parameters": [
+    { "name": "bore_r", "expr": 10, "comment": "bore radius" },
+    { "name": "od_r", "expr": 16, "comment": "outer radius" },
+    { "name": "height", "expr": 12, "comment": "spacer height" }
+  ],
+  "features": [
+    {
+      "id": "sk_section",
+      "type": "sketch",
+      "name": "Ring cross-section",
+      "plane": { "plane": "XZ", "offset": 0 },
+      "entities": [
+        {
+          "id": "e_section",
+          "kind": "rect",
+          "cx": "(bore_r + od_r) / 2",
+          "cy": "height / 2",
+          "width": "od_r - bore_r",
+          "height": "height"
+        }
+      ]
+    },
+    { "id": "rv_body", "type": "revolve", "name": "Spacer", "sketch": "sk_section", "axis": "y", "axisOffset": 0, "op": "new" }
+  ]
+}

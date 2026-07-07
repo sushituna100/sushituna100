@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "name": "enclosure-base",
+  "units": "mm",
+  "description": "Open-top electronics enclosure base, 100x60x30 outer, parametric wall thickness. A lid should fit the outer rim with clearance.",
+  "material": { "name": "ABS", "density": 1.05 },
+  "parameters": [
+    { "name": "length", "expr": 100, "comment": "outer length (X)" },
+    { "name": "width", "expr": 60, "comment": "outer width (Y)" },
+    { "name": "height", "expr": 30, "comment": "outer height (Z)" },
+    { "name": "wall", "expr": 2.5, "comment": "wall + floor thickness" },
+    { "name": "corner_r", "expr": 6, "comment": "outer corner radius" }
+  ],
+  "features": [
+    {
+      "id": "sk_outer",
+      "type": "sketch",
+      "name": "Outer profile",
+      "plane": { "plane": "XY", "offset": 0 },
+      "entities": [
+        { "id": "e_outer", "kind": "rect", "cx": 0, "cy": 0, "width": "length", "height": "width", "cornerRadius": "corner_r" }
+      ]
+    },
+    { "id": "ex_shell", "type": "extrude", "name": "Shell", "sketch": "sk_outer", "distance": "height", "op": "new" },
+    {
+      "id": "sk_cavity",
+      "type": "sketch",
+      "name": "Cavity profile",
+      "plane": { "plane": "XY", "offset": "wall" },
+      "entities": [
+        {
+          "id": "e_cavity",
+          "kind": "rect",
+          "cx": 0,
+          "cy": 0,
+          "width": "length - 2*wall",
+          "height": "width - 2*wall",
+          "cornerRadius": "max(corner_r - wall, 0.5)"
+        }
+      ]
+    },
+    { "id": "ex_cavity", "type": "extrude", "name": "Hollow out", "sketch": "sk_cavity", "distance": "height", "op": "cut", "target": "ex_shell" }
+  ]
+}

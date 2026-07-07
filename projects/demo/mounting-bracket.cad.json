@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "name": "mounting-bracket",
+  "units": "mm",
+  "description": "L-bracket: 80x50 base with two M5 clearance holes, vertical flange with a lightening hole.",
+  "material": { "name": "Aluminum 6061", "density": 2.7 },
+  "parameters": [
+    { "name": "base_w", "expr": 80, "comment": "base width (X)" },
+    { "name": "base_d", "expr": 50, "comment": "base depth (Y)" },
+    { "name": "base_t", "expr": 6, "comment": "base thickness" },
+    { "name": "hole_d", "expr": 5.5, "comment": "M5 clearance" },
+    { "name": "hole_spacing", "expr": 60, "comment": "hole center distance" },
+    { "name": "flange_h", "expr": 40, "comment": "flange height above base" },
+    { "name": "flange_t", "expr": 6, "comment": "flange thickness" }
+  ],
+  "features": [
+    {
+      "id": "sk_base",
+      "type": "sketch",
+      "name": "Base profile",
+      "plane": { "plane": "XY", "offset": 0 },
+      "entities": [
+        { "id": "e_plate", "kind": "rect", "cx": 0, "cy": 0, "width": "base_w", "height": "base_d", "cornerRadius": 6 },
+        { "id": "e_hole1", "kind": "circle", "cx": "-hole_spacing/2", "cy": 0, "radius": "hole_d/2", "hole": true },
+        { "id": "e_hole2", "kind": "circle", "cx": "hole_spacing/2", "cy": 0, "radius": "hole_d/2", "hole": true }
+      ]
+    },
+    { "id": "ex_base", "type": "extrude", "name": "Base", "sketch": "sk_base", "distance": "base_t", "op": "new" },
+    {
+      "id": "p_flange",
+      "type": "primitive",
+      "name": "Flange",
+      "kind": "box",
+      "size": ["base_w", "flange_t", "flange_h"],
+      "at": [0, "base_d/2 - flange_t/2", "base_t + flange_h/2"],
+      "op": "join",
+      "target": "ex_base"
+    },
+    {
+      "id": "p_lighten",
+      "type": "primitive",
+      "name": "Lightening hole",
+      "kind": "cylinder",
+      "size": [9, "flange_t * 3"],
+      "at": [0, "base_d/2 - flange_t/2", "base_t + flange_h/2 + 4"],
+      "rotate": [90, 0, 0],
+      "op": "cut",
+      "target": "ex_base"
+    }
+  ]
+}
