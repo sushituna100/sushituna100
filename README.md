@@ -1,54 +1,69 @@
-<h1>Hi, I'm Shishir! <br/>
+# 🥂 Mixer — meet 5 strangers, leave with a friend group
 
-<h2>Projects:</h2>
+Mixer is a friend-group-making app in the spirit of [Timeleft](https://timeleft.com): you take a
+short personality quiz, pick your interests, and pay a small reservation fee to get matched with
+compatible strangers for a dinner or activity. Where Mixer goes further is what happens **after**
+the event — tables can vote to become **lasting friend groups** with their own chat, and anyone
+can browse **open friend groups** looking for new members.
 
-- <b>Data Structures and Algorithms Practice (AlgoExpert)</b>
-  - [Praciting DS & Algos in Python](https://github.com/joshmadakor1/Algorithms-Practice)
-- <b>Full Stack Web App (React, NodeJS, Azure, and Machine Learning Components)</b>
-  - [Image Analysis Middleware](https://github.com/joshmadakor1/4chan-Image-Analysis-Middleware-C964) <b><i>(Potentially NSFW)</b></i>
-- <b>PowerShell</b>
-  - [Windows EventLog: Failed RDP Logins Source IP to full GeoData Conversion](https://github.com/joshmadakor1/Sentinel-Lab)
-  - [JWipe (Disk Wiping Utility)](https://github.com/joshmadakor1/Jwipe.PowerShell)
-  - [Active Directory Bulk User Creation](https://github.com/joshmadakor1/AD_PS)
-  - [FIM (File Integrity Monitor)](https://github.com/joshmadakor1/PowerShell-Integrity-FIM)
-- <b>C# (.NET Desktop Applications)</b>
-  - [Ransomware Proof of Concept (Encrypter)](https://github.com/joshmadakor1/EncrypterPOC)
-  - [Ransomware Proof of Concept (Decrypter)](https://github.com/joshmadakor1/DecrypterPOC)
-  - [Keylogger with Email Capability](https://github.com/joshmadakor1/Key-Logger-With-Email)
-- <b>Python</b>
-  - [Package Delivery Application (Datastructures and Algorithms Demo)](https://github.com/joshmadakor1/Package-Delivery-Pathfinding-Algorithm)
+## Features
 
-<h2>📺 Popular YouTube Videos</h2>
+- **Personality quiz + interests onboarding** — 5 personality dimensions (Timeleft-style sliders)
+  plus interest tags used for matching.
+- **Mixers feed** — upcoming dinners and activity mixers (trivia, hikes, bowling, paint nights).
+- **Paid reservations** — a small fee (a few dollars) holds your seat and keeps people committed.
+  Checkout is a simulated card flow with Luhn/expiry validation (`src/lib/payments.ts` is
+  Stripe-shaped, so real Stripe drops in later).
+- **Matching algorithm** — groups confirmed guests into tables of 6 by personality distance,
+  shared-interest overlap, and age proximity (`src/lib/matching.ts`).
+- **Table reveal + chat** — once matched, you see your tablemates and coordinate in a group chat.
+- **Vote to stay friends** — after the mixer, the table votes; a majority "yes" turns it into a
+  permanent friend group with its own chat.
+- **Open friend groups** — browse groups accepting members (sorted by shared interests), send a
+  join request, and existing members approve or decline.
 
-- [How to get into Cybersecurity Starting From Zero](https://www.youtube.com/watch?v=a83ASGn_V_s)
-- [A Day in the Life of a Cybersecurity Anayst](https://www.youtube.com/watch?v=uHy3oM7NnoU)
-- [How to Create a KeyLogger (C#)](https://www.youtube.com/watch?v=N-L9hklSlNk)
-- [Ransomware Demonstration (C#)](https://www.youtube.com/watch?v=OfvdQeh79s0)
-- [Is WGU Legit?](https://www.youtube.com/watch?v=E2MwRWxDBkA)
+## Tech stack
 
-<h2> 🤳 Connect with me:</h2>
+Next.js 14 (App Router) · TypeScript · Tailwind CSS · Prisma + SQLite · cookie-session auth (bcrypt).
 
-[<img align="left" alt="JoshMadakor | YouTube" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/youtube.svg" />][youtube]
-[<img align="left" alt="JoshMadakor | Twitter" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/twitter.svg" />][twitter]
-[<img align="left" alt="JoshMadakor | LinkedIn" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/linkedin.svg" />][linkedin]
-[<img align="left" alt="JoshMadakor | Instagram" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/instagram.svg" />][instagram]
+## Getting started
 
-[twitter]: https://twitter.com/joshmadakor
-[youtube]: https://www.youtube.com/c/joshmadakor
-[instagram]: https://www.instagram.com/joshmadakor/
-[linkedin]: https://linkedin.com/in/joshmadakor
+```bash
+npm install
+npx prisma migrate dev   # creates prisma/dev.db
+npm run db:seed          # 21 demo users, 6 events, 3 friend groups
+npm run dev              # http://localhost:3000
+```
 
-<!--
-**joshmadakor1/joshmadakor1** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+## Demo walkthrough
 
-Here are some ideas to get you started:
+Log in as **`demo@mixer.app` / `password123`** (all seeded users share the password), then:
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+1. **Home** — reserve a seat at *Thursday Dinner Mixer* and pay with test card
+   `4242 4242 4242 4242` (any future expiry, any CVC).
+2. On the event page, hit **✨ Run matching now (demo)** — in production this runs automatically
+   when booking closes — and meet your table.
+3. Open ***Last Thursday's Dinner*** under *Your mixers* — chat with your old table and **vote yes**
+   to turn it into a friend group (two tablemates already voted; yours tips the majority).
+4. **Groups tab** — chat with your *Trivia Titans*, and send a join request to
+   *Weekend Trailblazers*. Log in as `noah@example.com` to approve it from the other side.
+5. Or sign up fresh to experience the quiz + interests onboarding.
+
+## Project layout
+
+```
+prisma/schema.prisma      # data model (users, events, reservations, match groups, friend groups…)
+prisma/seed.ts            # demo data
+src/lib/                  # auth, matching algorithm, payments, quiz definitions
+src/app/api/              # route handlers (auth, reservations, payments, matching, chat, groups)
+src/app/                  # pages: landing, onboarding, home, mixers, checkout, groups, profile
+src/components/           # UI + client components (chat, vote panel, payment form…)
+```
+
+## Production notes
+
+- Set `SESSION_SECRET` in the environment (falls back to a dev-only constant).
+- Swap `chargeCard` in `src/lib/payments.ts` for a real Stripe PaymentIntent.
+- Point `DATABASE_URL` at Postgres and change the Prisma provider for multi-instance deploys.
+- Matching is triggered manually for the demo; wire `matchEvent` to a scheduled job that fires
+  when booking closes.

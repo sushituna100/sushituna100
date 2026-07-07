@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  age          Int
+  city         String
+  bio          String   @default("")
+  avatarEmoji  String   @default("🙂")
+  avatarColor  String   @default("#7c5cfc")
+  // JSON array of 5 numbers (1-5), one per personality dimension
+  personality  String   @default("[]")
+  // JSON array of interest tag strings
+  interests    String   @default("[]")
+  onboarded    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  reservations Reservation[]
+  memberships  GroupMembership[]
+  joinRequests GroupJoinRequest[]
+  messages     Message[]
+  votes        GroupVote[]
+  payments     Payment[]
+}
+
+model MixerEvent {
+  id               String   @id @default(cuid())
+  title            String
+  type             String // "dinner" | "activity"
+  emoji            String   @default("🍽️")
+  venue            String
+  city             String
+  startsAt         DateTime
+  priceCents       Int
+  capacityPerGroup Int      @default(6)
+  description      String   @default("")
+  matched          Boolean  @default(false)
+
+  reservations Reservation[]
+  matchGroups  MatchGroup[]
+}
+
+model Reservation {
+  id           String   @id @default(cuid())
+  userId       String
+  eventId      String
+  // "pending_payment" | "confirmed" | "attended"
+  status       String   @default("pending_payment")
+  createdAt    DateTime @default(now())
+  matchGroupId String?
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      MixerEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  matchGroup MatchGroup? @relation(fields: [matchGroupId], references: [id])
+  payment    Payment?
+
+  @@unique([userId, eventId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  userId        String
+  reservationId String   @unique
+  amountCents   Int
+  cardLast4     String
+  status        String   @default("succeeded")
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+}
+
+model MatchGroup {
+  id            String  @id @default(cuid())
+  eventId       String
+  name          String
+  friendGroupId String?
+
+  event        MixerEvent   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  friendGroup  FriendGroup? @relation(fields: [friendGroupId], references: [id])
+  reservations Reservation[]
+  messages     Message[]
+  votes        GroupVote[]
+}
+
+model GroupVote {
+  id           String  @id @default(cuid())
+  matchGroupId String
+  userId       String
+  keepGoing    Boolean
+
+  matchGroup MatchGroup @relation(fields: [matchGroupId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchGroupId, userId])
+}
+
+model FriendGroup {
+  id          String   @id @default(cuid())
+  name        String
+  emoji       String   @default("✨")
+  description String   @default("")
+  city        String   @default("")
+  // JSON array of interest tag strings that describe the group vibe
+  interests   String   @default("[]")
+  open        Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  memberships  GroupMembership[]
+  joinRequests GroupJoinRequest[]
+  messages     Message[]
+  matchGroups  MatchGroup[]
+}
+
+model GroupMembership {
+  id      String @id @default(cuid())
+  userId  String
+  groupId String
+  role    String @default("member") // "founder" | "member"
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group FriendGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+}
+
+model GroupJoinRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  groupId   String
+  message   String   @default("")
+  status    String   @default("pending") // "pending" | "approved" | "declined"
+  createdAt DateTime @default(now())
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group FriendGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  senderId      String
+  matchGroupId  String?
+  friendGroupId String?
+  body          String
+  createdAt     DateTime @default(now())
+
+  sender      User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  matchGroup  MatchGroup?  @relation(fields: [matchGroupId], references: [id], onDelete: Cascade)
+  friendGroup FriendGroup? @relation(fields: [friendGroupId], references: [id], onDelete: Cascade)
+}

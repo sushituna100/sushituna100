@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# database
+prisma/dev.db
+prisma/dev.db-journal
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
