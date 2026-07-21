@@ -9,9 +9,16 @@ tradable events (**spring, SOS, LPS, upthrust/UTAD, SOW**), cross-examines each
 with independent volume/momentum indicators, and sizes every trade to a small
 fixed fraction of equity behind a protective stop.
 
-> **Detection is automated. Execution is human-gated.** The engine only ever
-> *proposes* trades. Placing an order happens through the Robinhood runbook,
-> behind an explicit review-and-confirm gate. Nothing here auto-trades.
+> **Two ways to use this.** The recommended, no-scripts path is
+> **[CLAUDE.md](CLAUDE.md)** — an agent program that turns Claude + the Robinhood
+> MCP tools into the bot: you say "check GLD", it fetches data and indicators via
+> MCP, applies the rules, and proposes a trade for you to confirm. The Python
+> package below is the optional *exact-math reference* / backtester behind the
+> same rules — use it only if you want deterministic numbers or offline testing.
+>
+> **Detection is automated. Execution is human-gated.** The system only ever
+> *proposes* trades. Placing an order happens behind an explicit
+> review-and-confirm gate. Nothing here auto-trades.
 >
 > **Not financial advice.** Educational tooling. Run in dry-run/paper first.
 
