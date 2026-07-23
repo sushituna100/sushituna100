@@ -215,6 +215,49 @@ Layer 1  = exit if a daily bar closes < 66.90
 Layer 2  = broker stop_market GTC @ 65.92
 ```
 
+## Sentiment & market-regime gate (check before ANY new long)
+
+Wyckoff *is* a sentiment method — volume/VSA reads the crowd directly — but a good
+setup in a bad tape still fails. Before opening a new long, confirm the mood:
+
+- **Fear gauge (VIX):** `get_index_quotes(["VIX"])`. VIX **falling from a spike** =
+  fear draining → supportive of longs (climax/spring buying). VIX **spiking and
+  rising fast (>~30 and climbing)** = uncontrolled panic → **do not initiate new
+  longs** until it stops rising (a spring during a still-accelerating panic is not
+  yet a spring). Extreme *low* VIX (<~13) = complacency → be stricter on shorts/
+  distribution warnings.
+- **Broad-tape alignment:** pull SPY daily bars. If SPY is in a confirmed Wyckoff
+  **markdown** (below a broken support, −DI dominant), treat all new longs as
+  lower-confidence and size down or skip — don't fight a falling market.
+- **Comparative strength (Wyckoff stock selection):** prefer names **outperforming
+  SPY** over the range for longs (relative strength), underperformers for shorts.
+  For GLD specifically, gold often *leads* when fear rises — that divergence from
+  SPY is itself a bullish tell.
+- **Retail-crowding proxy (optional):** `get_popular_watchlists` /
+  `get_equity_fundamentals` volume vs. float can hint whether the "mob" is already
+  crowded in. Heavy, euphoric retail crowding near resistance argues *distribution*,
+  not accumulation.
+
+Record the regime read in the plan ("VIX 18 falling, SPY neutral, GLD RS+"). If the
+gate says risk-off, the day's answer is **no new long** — say so and stop.
+
+## Backtesting & validation (how we know it has worked)
+
+Do not trust the strategy on faith — validate it on history and re-check weekly.
+
+- Pull ~2 years of daily bars per symbol (`get_equity_historicals`, interval
+  `day`), save as CSV (`time,open,high,low,close,volume`), and run the reference
+  backtester: `PYTHONPATH=src python3 -m wyckoff_bot.cli backtest data/GLD.csv`.
+- Results are in **R-multiples** (profit/loss ÷ the risk taken), which is
+  size-independent. Read: **expectancy per trade (R)**, **win rate**, **profit
+  factor**, **max drawdown (R)**.
+- **Go/no-go for live execution:** only run the execute routine on symbols whose
+  backtest shows **positive expectancy AND profit factor > 1.3 AND max drawdown
+  the account can stomach**. A symbol that fails validation stays on the watchlist
+  for analysis but is **excluded from auto-execution**.
+- The Sunday runbook re-runs this every week and flags any degradation. Backtests
+  ignore slippage/fees/gaps, so treat them as a filter, not a promise.
+
 ## Step 7 — Present the plan (then STOP and wait)
 
 Show a compact summary and wait for a decision. Example:
