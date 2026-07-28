@@ -89,9 +89,9 @@ Sources: [StockCharts ChartSchool tutorial](https://chartschool.stockcharts.com/
 
 ## 5. The exact rules this bot encodes
 
-Detection lives in `wyckoff.py`; everything is a tunable threshold in
-`WyckoffConfig`. Measured in **relative** units so the same rules work on a $30
-and a $600 instrument:
+Detection lives in `CLAUDE.md` Steps 1–3; every threshold is stated explicitly
+there and tunable. Measured in **relative** units so the same rules work on a
+$30 and a $600 instrument:
 
 - **Trading range** = support/resistance over a lookback window, required to be a
   genuine consolidation (not too wide vs. price, at least a couple of ATRs tall,
@@ -110,9 +110,9 @@ and a $600 instrument:
 
 A Wyckoff pattern alone is discretionary and prone to false signals (a
 well-known drawback of the method — steep learning curve, subjective reads). So
-no trigger becomes a trade until it survives cross-examination in `signals.py`.
-Crucially, **the confirmations differ by setup type**, because the correct
-confirmation depends on what the pattern claims:
+no trigger becomes a trade until it survives cross-examination, per `CLAUDE.md`
+Step 4. Crucially, **the confirmations differ by setup type**, because the
+correct confirmation depends on what the pattern claims:
 
 - **Reversal triggers (Spring, Upthrust/UTAD)** fire at the moment of maximum
   apparent weakness/strength — so raw momentum is *meant* to look bad there. The
@@ -141,16 +141,18 @@ Sources: [FXOpen — Wyckoff trading method](https://fxopen.com/blog/en/the-wyck
 
 Confirmation reduces bad entries; **risk management guarantees survival.** The
 edge of a discretionary method is uncertain and signals *will* be wrong, so the
-non-negotiables (in `risk.py`) are:
+non-negotiables (in `CLAUDE.md` Step 6) are:
 
 - **Fixed-fractional sizing:** every trade risks a small fixed fraction of equity
-  to its stop (default **0.5%**). Position size is *derived from the stop*, never
-  guessed.
-- **Hard caps:** ≤ 20% of equity in one name; ≤ 5 concurrent positions; ≤ 2%
-  total open risk across the book.
+  to its stop — currently **0.10%** while the strategy is in **testing mode**
+  (see `CLAUDE.md`'s Testing Mode section; this loosens only on explicit human
+  instruction once live results validate it). Position size is *derived from the
+  stop*, never guessed.
+- **Hard caps (testing mode):** ≤ 5% of equity in one name; ≤ 3 concurrent
+  positions; ≤ 0.5% total open risk across the book.
 - **Protective stop on every entry** — below the spring low (longs) / above the
   upthrust high (shorts), plus an ATR cushion. Placed at entry time, always.
-- **Daily-loss kill switch:** if realized losses hit 3% of equity in a day, no
+- **Daily-loss kill switch:** if realized losses hit 1.5% of equity in a day, no
   new entries.
 - **Targets:** first = the range top (structural); second = a cause-and-effect
   **measured move** (range height projected).
@@ -187,10 +189,12 @@ where institutional campaigns and crowd phases are visible and where false
 signals are fewest. Trade daily; use weekly for context. Avoid intraday until
 the daily process is proven.
 
-**Recommended starter universe (in `config/config.example.yaml`):**
-`SPY, QQQ, IWM, GLD, SLV, USO, GDX, XLE` — a mix of index and commodity ETFs,
-all liquid, all crowd-driven, none dependent on single-company headline risk.
-Start there in **paper/dry-run**, measure expectancy, then narrow to what works.
+**Recommended starter universe** (live on Robinhood as the "Wyckoff Watch"
+watchlist, and tracked in `CLAUDE.md`'s Universe table): `SPY, QQQ, IWM, GLD,
+SLV, USO, GDX, XLE` — a mix of index and commodity ETFs, all liquid, all
+crowd-driven, none dependent on single-company headline risk. Each symbol is
+individually validated (see CLAUDE.md's Backtesting & Validation section) before
+being promoted to the Approved-for-execution set.
 
 Sources: [Wyckoff Analytics — Swing Trading Using the Wyckoff Method](https://www.wyckoffanalytics.com/demand/swing-trading-using-the-wyckoff-method/),
 [Nasdaq — ETF Liquidity](https://www.nasdaq.com/articles/etf-liquidity-what-actually-drives-trading-capacity),
@@ -208,7 +212,10 @@ Sources: [Wyckoff Analytics — Swing Trading Using the Wyckoff Method](https://
 
 ## 10. How this maps to Robinhood agentic
 
-The Python library does the deterministic detection; the **Robinhood MCP tools**
-supply live data and execution. The bot never auto-trades: it proposes, a human
-confirms, then the agent places a limit entry with a protective stop. Full
-runbook and safety gates: [`agent/ROBINHOOD_AGENT.md`](agent/ROBINHOOD_AGENT.md).
+There is no separate library — **[`CLAUDE.md`](CLAUDE.md)** *is* the program.
+Claude reads it and executes the strategy directly against the **Robinhood MCP
+tools**: fetching data, detecting structure, confirming signals, sizing risk, and
+placing orders. It never auto-trades: it proposes, a human confirms, then the
+agent places a limit entry with a protective stop. Full rules, risk caps, and the
+three scheduled routines (daily scan, daily propose-and-confirm execution, Sunday
+review + validation): see `CLAUDE.md`.
