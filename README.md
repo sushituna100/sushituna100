@@ -23,21 +23,31 @@ thesis and roadmap.
 |---|---|
 | **CAD kernel** (`src/kernel/`) | Parametric feature timeline → solid bodies. Sketches (rect / circle / slot / n-gon / polygon, holes), extrude, revolve, primitives, booleans, transform, mirror, linear & circular patterns. Expression-driven parameters (`base_w / 2 - 4`). BVH-accelerated mesh CSG (three-bvh-csg). Mass properties (volume, mass, surface area, center of mass, bbox) and binary STL export. |
 | **Workspace UI** (`src/ui/`) | Fusion 360-style ribbon (Solid / Sketch / Modify / Inspect), 3D viewport (Z-up, orbit, view presets, click-to-select, click-to-draw sketching on any plane), feature timeline with edit / suppress / reorder / delete, browser panel with live parameters and mass properties. |
-| **AI copilot** (`server/agent.ts`) | Claude agent with tools: `list_documents`, `read_document`, `mass_properties`, `update_document`, `create_document`. Reads the whole project folder, iterates against evaluation feedback (geometry errors + measured mass properties) until targets are met, and streams proposals to the client over SSE. |
+| **AI copilot** (`server/agent.ts`) | Agent over a local, open-source LLM served by [Ollama](https://ollama.com) (no cloud API key), with tools: `list_documents`, `read_document`, `mass_properties`, `update_document`, `create_document`. Reads the whole project folder, iterates against evaluation feedback (geometry errors + measured mass properties) until targets are met, and streams proposals to the client over SSE. |
 | **Project store** (`server/projects.ts`) | A project is just a folder of `*.cad.json` files — diffable, git-friendly, reviewable. |
 
 ## Quick start
 
+The AI copilot runs entirely on a local, open-source model via [Ollama](https://ollama.com) —
+no cloud API key, no per-token cost.
+
 ```bash
+# 1. Install Ollama (https://ollama.com/download), then pull a tool-calling-capable model:
+ollama pull qwen2.5-coder:7b     # ~4.7GB, runs fine on CPU or a modest GPU
+ollama serve                     # if it isn't already running as a background service
+
+# 2. Install and run SolidPilot
 npm install
-cp .env.example .env        # add your ANTHROPIC_API_KEY
-npm run dev                 # client on :5173, server on :8787
+cp .env.example .env             # defaults already point at localhost:11434
+npm run dev                      # client on :5173, server on :8787
 ```
 
 Open http://localhost:5173 — the `demo` project loads with three sample parts
 (mounting bracket, shaft spacer, electronics enclosure).
 
-Without an API key everything works except the copilot panel.
+Without Ollama running, everything works except the copilot panel (it'll tell you what to start).
+Larger local models (`qwen2.5-coder:14b`, `qwen2.5:32b`) follow the tool-calling schema more
+reliably on multi-step edits if you have the RAM/VRAM for them — set `OLLAMA_MODEL` in `.env`.
 
 ```bash
 npm run build               # typecheck + production bundle
@@ -86,7 +96,11 @@ schema, constraint-based sketches, STEP import/export, multi-user CRDT editing, 
 
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | enables the copilot |
-| `ANTHROPIC_MODEL` | default `claude-sonnet-5` |
+| `OLLAMA_HOST` | Ollama base URL, default `http://localhost:11434` |
+| `OLLAMA_MODEL` | model tag, default `qwen2.5-coder:7b` — any Ollama model with tool-calling support works |
 | `PORT` | server port, default `8787` |
 | `PROJECTS_DIR` | parts storage, default `./projects` |
+
+Prefer a hosted frontier model instead? Swap `server/agent.ts`'s `OpenAI` client for
+`@anthropic-ai/sdk` (or point the same OpenAI client at any other OpenAI-compatible endpoint) —
+the tool definitions, evaluation loop, and proposal streaming are provider-agnostic.

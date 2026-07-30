@@ -1,13 +1,20 @@
 /**
- * The SolidPilot copilot: a server-side agent loop over the Claude API.
+ * The SolidPilot copilot: a server-side agent loop over a local, open-source
+ * LLM served by Ollama (http://localhost:11434) through its OpenAI-compatible
+ * chat-completions API. No cloud API key required.
  *
  * The agent has project-wide context (every part file in the project folder)
  * and tools to read, measure, and rewrite documents. Writes are NOT saved to
  * disk — they stream to the client as *proposals* that the user accepts or
  * rejects in the viewport, exactly like reviewing an AI edit in Cursor.
+ *
+ * Tool-calling reliability depends entirely on the local model: small models
+ * (7-8B) are noticeably less consistent than a frontier hosted model at
+ * following the schema and converging on targets across many steps.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { evaluateDocument } from "../src/kernel/evaluate";
 import { formatMassProperties, measureBody } from "../src/kernel/measure";
 import type { CadDocument } from "../src/kernel/types";
@@ -30,61 +37,77 @@ export interface AgentRequest {
   overlay?: Record<string, CadDocument>;
 }
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+const OLLAMA_HOST = process.env.OLLAMA_HOST ?? "http://localhost:11434";
+const MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5-coder:7b";
 const MAX_ITERATIONS = 24;
 
-const TOOLS: Anthropic.Tool[] = [
+const TOOLS: ChatCompletionTool[] = [
   {
-    name: "list_documents",
-    description:
-      "List every part document in the current project with a one-line summary (parameters, features, bodies). Use this to understand what exists before reading or editing.",
-    input_schema: { type: "object", properties: {}, required: [] },
-  },
-  {
-    name: "read_document",
-    description: "Read the full JSON of one part document in the project.",
-    input_schema: {
-      type: "object",
-      properties: { name: { type: "string", description: "Document name (no extension)" } },
-      required: ["name"],
+    type: "function",
+    function: {
+      name: "list_documents",
+      description:
+        "List every part document in the current project with a one-line summary (parameters, features, bodies). Use this to understand what exists before reading or editing.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
-    name: "mass_properties",
-    description:
-      "Evaluate a document's geometry and return mass properties per body: volume, mass (from material density), surface area, bounding box, center of mass. Use this to verify a design hits numeric targets.",
-    input_schema: {
-      type: "object",
-      properties: { name: { type: "string", description: "Document name" } },
-      required: ["name"],
-    },
-  },
-  {
-    name: "update_document",
-    description:
-      "Propose a full replacement of one document. The document is validated and its geometry evaluated; you get back any errors plus resulting mass properties. The change is shown to the user as a live preview in their viewport for accept/reject — it is not saved until they accept. Always send the COMPLETE document JSON.",
-    input_schema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Document name to update" },
-        document: { type: "object", description: "The complete new document JSON" },
-        rationale: { type: "string", description: "One sentence: what changed and why" },
+    type: "function",
+    function: {
+      name: "read_document",
+      description: "Read the full JSON of one part document in the project.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "Document name (no extension)" } },
+        required: ["name"],
       },
-      required: ["name", "document"],
     },
   },
   {
-    name: "create_document",
-    description:
-      "Create a brand-new part document in the project (proposed to the user for accept/reject, like update_document). Always send the COMPLETE document JSON.",
-    input_schema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "New document name (letters, digits, - _ only)" },
-        document: { type: "object", description: "The complete document JSON" },
-        rationale: { type: "string" },
+    type: "function",
+    function: {
+      name: "mass_properties",
+      description:
+        "Evaluate a document's geometry and return mass properties per body: volume, mass (from material density), surface area, bounding box, center of mass. Use this to verify a design hits numeric targets.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "Document name" } },
+        required: ["name"],
       },
-      required: ["name", "document"],
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_document",
+      description:
+        "Propose a full replacement of one document. The document is validated and its geometry evaluated; you get back any errors plus resulting mass properties. The change is shown to the user as a live preview in their viewport for accept/reject — it is not saved until they accept. Always send the COMPLETE document JSON.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Document name to update" },
+          document: { type: "object", description: "The complete new document JSON" },
+          rationale: { type: "string", description: "One sentence: what changed and why" },
+        },
+        required: ["name", "document"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_document",
+      description:
+        "Create a brand-new part document in the project (proposed to the user for accept/reject, like update_document). Always send the COMPLETE document JSON.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "New document name (letters, digits, - _ only)" },
+          document: { type: "object", description: "The complete document JSON" },
+          rationale: { type: "string" },
+        },
+        required: ["name", "document"],
+      },
     },
   },
 ];
@@ -126,7 +149,13 @@ ${SCHEMA_GUIDE}
 - Use parameters for anything the user may want to tweak; give them clear names and comments.
 - Cross-part reasoning is your superpower: read sibling parts to match hole patterns, clearances, and interfaces.
 - Be concise in prose. The user sees your geometry changes live in their viewport as a proposal they accept or reject — describe intent and key numbers, not JSON.
-- Never invent tool results. If something fails repeatedly, explain what you tried and ask a precise question.`;
+- Never invent tool results. If something fails repeatedly, explain what you tried and ask a precise question.
+- You MUST call tools using the provided function-calling mechanism, never by writing JSON or code fences in your text reply.`;
+}
+
+/** Ollama's OpenAI-compatible endpoint doesn't check the key; any non-empty string works. */
+function makeClient(): OpenAI {
+  return new OpenAI({ baseURL: `${OLLAMA_HOST}/v1`, apiKey: "ollama" });
 }
 
 export async function runAgent(
@@ -134,16 +163,7 @@ export async function runAgent(
   emit: (event: AgentEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    emit({
-      type: "error",
-      message: "ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key to enable the copilot.",
-    });
-    emit({ type: "done" });
-    return;
-  }
-  const client = new Anthropic({ apiKey });
+  const client = makeClient();
 
   // In-run view of documents: disk state + client overlay + this run's proposals.
   const overlay = new Map<string, CadDocument>(Object.entries(req.overlay ?? {}));
@@ -198,52 +218,66 @@ export async function runAgent(
     }
   }
 
-  const messages: Anthropic.MessageParam[] = req.messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: buildSystemPrompt(req.project, req.activeDocument) },
+    ...req.messages.map((m): ChatCompletionMessageParam => ({ role: m.role, content: m.content })),
+  ];
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       if (signal?.aborted) break;
-      const response = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
-        system: buildSystemPrompt(req.project, req.activeDocument),
-        tools: TOOLS,
-        messages,
-      });
+      const response = await client.chat.completions.create(
+        { model: MODEL, messages, tools: TOOLS, tool_choice: "auto" },
+        { signal },
+      );
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of response.content) {
-        if (block.type === "text" && block.text.trim()) {
-          emit({ type: "text", text: block.text });
-        } else if (block.type === "tool_use") {
-          emit({ type: "tool_start", name: block.name, input: block.input });
-          let result: string;
-          try {
-            result = handleTool(block.name, (block.input ?? {}) as Record<string, unknown>);
-          } catch (err) {
-            result = `ERROR: ${String((err as Error).message ?? err)}`;
-          }
-          emit({
-            type: "tool_result",
-            name: block.name,
-            ok: !result.startsWith("ERROR") && !result.startsWith("VALIDATION"),
+      const choice = response.choices[0];
+      const message = choice.message;
+
+      if (message.content && message.content.trim()) {
+        emit({ type: "text", text: message.content });
+      }
+
+      const toolCalls = message.tool_calls ?? [];
+      if (toolCalls.length === 0) break;
+
+      messages.push({ role: "assistant", content: message.content ?? null, tool_calls: toolCalls });
+
+      for (const call of toolCalls) {
+        const fnName = call.function.name;
+        let args: Record<string, unknown> = {};
+        try {
+          args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+        } catch {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: `ERROR: could not parse arguments as JSON: ${call.function.arguments}`,
           });
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
+          continue;
         }
-      }
 
-      if (response.stop_reason === "tool_use" && toolResults.length > 0) {
-        messages.push({ role: "assistant", content: response.content });
-        messages.push({ role: "user", content: toolResults });
-        continue;
+        emit({ type: "tool_start", name: fnName, input: args });
+        let result: string;
+        try {
+          result = handleTool(fnName, args);
+        } catch (err) {
+          result = `ERROR: ${String((err as Error).message ?? err)}`;
+        }
+        emit({
+          type: "tool_result",
+          name: fnName,
+          ok: !result.startsWith("ERROR") && !result.startsWith("VALIDATION"),
+        });
+        messages.push({ role: "tool", tool_call_id: call.id, content: result });
       }
-      break;
     }
   } catch (err) {
-    emit({ type: "error", message: String((err as Error).message ?? err) });
+    const message = String((err as Error).message ?? err);
+    const hint = message.includes("ECONNREFUSED") || message.includes("fetch failed")
+      ? ` Is Ollama running? Start it with "ollama serve" and make sure "${MODEL}" is pulled ("ollama pull ${MODEL}").`
+      : "";
+    emit({ type: "error", message: message + hint });
   }
   emit({ type: "done" });
 }

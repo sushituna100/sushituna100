@@ -12,7 +12,7 @@ async function json<T>(res: Response): Promise<T> {
 
 export const api = {
   health: () =>
-    fetch("/api/health").then((r) => json<{ ok: boolean; hasApiKey: boolean; model: string }>(r)),
+    fetch("/api/health").then((r) => json<{ ok: boolean; aiReady: boolean; model: string }>(r)),
   listProjects: () => fetch("/api/projects").then((r) => json<{ projects: string[] }>(r)),
   createProject: (name: string) =>
     fetch("/api/projects", {

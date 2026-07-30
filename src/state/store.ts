@@ -106,7 +106,7 @@ export const useStore = create<AppState>((set, get) => ({
   init: async () => {
     try {
       const health = await api.health();
-      set({ aiAvailable: health.hasApiKey, aiModel: health.model });
+      set({ aiAvailable: health.aiReady, aiModel: health.model });
       let { projects } = await api.listProjects();
       if (projects.length === 0) {
         await api.createProject("my-project");

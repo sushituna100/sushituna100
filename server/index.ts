@@ -27,12 +27,22 @@ const wrap =
     }
   };
 
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
-    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5",
-  });
+const OLLAMA_HOST = process.env.OLLAMA_HOST ?? "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5-coder:7b";
+
+app.get("/api/health", async (_req, res) => {
+  let aiReady = false;
+  try {
+    // Ollama's native API (not the /v1 OpenAI-compat surface) lists pulled models.
+    const r = await fetch(`${OLLAMA_HOST}/api/tags`, { signal: AbortSignal.timeout(1500) });
+    if (r.ok) {
+      const body = (await r.json()) as { models?: { name: string }[] };
+      aiReady = Boolean(body.models?.some((m) => m.name === OLLAMA_MODEL || m.name.startsWith(`${OLLAMA_MODEL}:`)));
+    }
+  } catch {
+    aiReady = false;
+  }
+  res.json({ ok: true, aiReady, model: OLLAMA_MODEL });
 });
 
 app.get("/api/projects", wrap((_req, res) => {
@@ -80,7 +90,10 @@ app.post("/api/agent", (req, res) => {
   res.flushHeaders();
 
   const abort = new AbortController();
-  req.on("close", () => abort.abort());
+  // res.on("close") — not req.on("close") — fires when the connection actually
+  // terminates. req.on("close") fires as soon as Express finishes reading the
+  // request body, i.e. almost immediately, which aborted every agent run.
+  res.on("close", () => abort.abort());
 
   const emit = (event: Record<string, unknown>) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -101,5 +114,5 @@ if (process.env.NODE_ENV === "production" && fs.existsSync(dist)) {
 const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
   console.log(`[solidpilot] server on http://localhost:${port}`);
-  console.log(`[solidpilot] AI copilot: ${process.env.ANTHROPIC_API_KEY ? "enabled" : "DISABLED (set ANTHROPIC_API_KEY)"}`);
+  console.log(`[solidpilot] AI copilot: Ollama @ ${OLLAMA_HOST}, model "${OLLAMA_MODEL}" (GET /api/health to check readiness)`);
 });

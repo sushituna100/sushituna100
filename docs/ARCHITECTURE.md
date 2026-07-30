@@ -15,7 +15,7 @@
 ┌──────────────────────────▼───────────────────────────────▼─────────┐
 │ Node server (Express)                                              │
 │   projects.ts  — folder of *.cad.json  ("repo of parts")           │
-│   agent.ts     — Claude agent loop: list/read/measure/write tools  │
+│   agent.ts     — local-LLM agent loop: list/read/measure/write tools│
 │   CAD kernel (server) — same code, validates + measures AI writes  │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -55,8 +55,12 @@ one source of truth for geometry.
 
 ## AI copilot (`server/agent.ts`)
 
-Agent loop over the Claude API (`ANTHROPIC_MODEL`, default `claude-sonnet-5`), streaming SSE
-events to the client: `text`, `tool_start`, `tool_result`, `proposal`, `error`, `done`.
+Agent loop over a local, open-source LLM served by Ollama (`OLLAMA_MODEL`, default
+`qwen2.5-coder:7b`) via its OpenAI-compatible chat-completions API — no cloud API key. Streams SSE
+events to the client: `text`, `tool_start`, `tool_result`, `proposal`, `error`, `done`. The `openai`
+client + tool-calling shape is provider-agnostic, so swapping in a hosted frontier model (Anthropic,
+or any other OpenAI-compatible endpoint) later is a localized change to `server/agent.ts` only —
+tool-calling reliability on small local models is the main quality tradeoff versus a hosted model.
 
 Tools: `list_documents`, `read_document`, `mass_properties`, `update_document`, `create_document`.
 Writes are validated + evaluated server-side; the agent receives errors and measured mass

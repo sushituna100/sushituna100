@@ -50,7 +50,9 @@ export function AIPanel() {
 
       {aiAvailable === false && (
         <div className="ai-warning">
-          Copilot disabled — set <code>ANTHROPIC_API_KEY</code> in <code>.env</code> and restart the server.
+          Copilot unavailable — install <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a>,
+          run <code>ollama pull {aiModel || "qwen2.5-coder:7b"}</code>, make sure <code>ollama serve</code> is
+          running, then reload this page.
         </div>
       )}
 
