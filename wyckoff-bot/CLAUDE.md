@@ -42,13 +42,18 @@ the daily scan routine. Current classification (updated by the Sunday routine):
 |---|---|---|
 | **GLD** | ✅ Approved | Primary — gold, liquid, sentiment-driven, no roll decay |
 | **SPY** | ✅ Approved | Broad index, deepest liquidity |
-| **USO** | ✅ Approved | Oil, best profit factor in the initial review |
-| **GDX** | ⚠️ Watch-only | Positive but one trade carries most of the edge |
-| **SLV** | ❌ Excluded | Failed validation — analyze only, never execute |
-| **QQQ, IWM, XLE** | ⏳ Unvalidated | Watch-only until reviewed (see Backtesting section) |
+| **USO** | ✅ Approved | Oil, strongest profit factor across both reviews |
+| **GDX** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
+| **QQQ** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (15 trades) — treat cautiously until it clears a live trigger |
+| **IWM** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (13 trades), weakest PF of the approved set — treat cautiously |
+| **XLE** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
+| **SLV** | ❌ Excluded | Failed validation both reviews — barely positive and outlier-dependent — analyze only, never execute |
 
-Only trade the **Approved** set. Everything else is analysis/context only —
-report on it if asked, but never place an order against it.
+Only trade the **Approved** set. "Provisional" entries passed the mechanical
+go/no-go rule on a small sample (2-year, script-free walk-forward) — weight
+them below GLD/SPY/USO until they've each produced a couple of live outcomes.
+Everything Excluded is analysis/context only — report on it if asked, but
+never place an order against it.
 
 ## What you're exploiting (context)
 
@@ -293,17 +298,32 @@ scripts**:
 This is approximate by nature (you're reasoning over fetched data, not running a
 formal simulator) — treat it as a sanity filter, not a precise backtest.
 
-**Current baseline** (established 2026-07 on ~3.5 years of real daily data,
-2023→2026 — the Sunday routine refreshes this and the table above):
+**Current baseline** (refreshed 2026-08-02 on ~2 years of real daily data,
+2024-08→2026-08, per the ~2-year window this section specifies — narrower than
+the original one-time 2026-07 setup review, which used ~3.5 years; expect trade
+counts and R to shift some between reviews as the window and available history
+change, not just as edge changes):
 
-| Symbol | Trades | Win% | Total R | Verdict |
-|---|---|---|---|---|
-| GLD | 12 | 50% | +9.2R | ✅ Approved |
-| SPY | 34 | 44% | +20.8R | ✅ Approved |
-| USO | 12 | 58% | +10.2R | ✅ Approved |
-| GDX | 21 | 29% | +11.7R | ⚠️ Watch-only (one outlier trade carries it) |
-| SLV | 10 | 20% | −3.4R | ❌ Excluded |
-| QQQ, IWM, XLE | — | — | — | ⏳ Not yet reviewed |
+| Symbol | Trades | Win% | Total R | PF | Outlier-dep? | Verdict |
+|---|---|---|---|---|---|---|
+| GLD | 5 | 60% | +9.1R | 8.40 | No | ✅ Approved |
+| SPY | 17 | 41% | +9.0R | 1.90 | No | ✅ Approved |
+| USO | 7 | 57% | +9.3R | 4.09 | No | ✅ Approved |
+| GDX | 8 | 38% | +7.4R | 2.48 | No | ✅ Approved (provisional — was Watch-only) |
+| QQQ | 15 | 40% | +8.0R | 1.88 | No | ✅ Approved (provisional — newly reviewed) |
+| IWM | 13 | 46% | +3.6R | 1.51 | No | ✅ Approved (provisional — newly reviewed, weakest PF) |
+| XLE | 8 | 50% | +8.0R | 3.00 | No | ✅ Approved (provisional — newly reviewed) |
+| SLV | 6 | 17% | +0.4R | 1.07 | **Yes** | ❌ Excluded |
+
+Previous baseline (2026-07, ~3.5yr window) for reference: GLD 12/50%/+9.2R,
+SPY 34/44%/+20.8R, USO 12/58%/+10.2R, GDX 21/29%/+11.7R (outlier-dependent then),
+SLV 10/20%/−3.4R, QQQ/IWM/XLE not yet reviewed.
+
+**Caveat on this review:** all "provisional" trade counts are small (8–17
+trades) — treat the classification as directional, not statistically strong.
+GDX's outlier-dependence flipped between reviews (window length + a simplified
+ATR estimate can both shift which bars qualify); size the four provisional
+symbols cautiously until each has cleared at least one live trigger.
 
 ## Step 7 — Present the plan (then STOP and wait)
 
