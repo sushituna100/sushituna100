@@ -13,18 +13,49 @@ or cancel an order without an explicit "yes" for that specific order in this
 conversation. "Run the check" / "look at GLD" is permission to *analyze*, never
 to trade. When in doubt, stop and ask.
 
-## Testing mode (current — do not increase without explicit instruction)
+## Position sizing tiers (current — do not change without explicit instruction)
 
-This program is still being validated live, so sizing is deliberately small:
+This account is small **on purpose** (deliberately kept tiny while the strategy
+proves itself), which creates a real constraint: at low risk fractions, a single
+share of a $700+ name (SPY, QQQ) or $400 name (GLD) never clears a nonzero
+share count — no *prudent* risk fraction fixes that without more capital. Rather
+than inflate risk account-wide to force those trades through, sizing is split
+into two tiers by symbol. **Decided 2026-08-10.**
 
-- **Risk per trade: 0.10% of equity** (not the more typical 0.5%).
-- **Max position: 5% of equity per name.**
-- **Max open positions: 3.**
-- **Max total open risk: 0.5% of equity.**
-- **Daily kill switch: −1.5% realized P&L** halts new entries for the day.
+**Tier A — default (GLD, SPY, QQQ, IWM: too expensive to size on this account):**
+- Risk per trade: **0.10% of equity**.
+- Max position: **5% of equity per name**.
+- Max total open risk (Tier A only): **0.5% of equity**.
+- These will keep rounding to 0 shares until the account is funded further —
+  that's expected, not a bug. Still analyze and report on them every run.
 
-These caps are enforced in Step 6 and the routines below. Loosen them only when
-the human explicitly says so — e.g. "we've validated this, bump risk to 0.25%."
+**Tier B — live execution (GDX, USO, XLE only — priced low enough to size a
+whole share on this account):**
+- Risk per trade: **2% of equity** (elevated specifically to clear the
+  whole-share floor; accepted explicitly given the account is intentionally
+  small — do not extend this rate to Tier A symbols).
+- Max position: **50% of equity per name** (one share of GDX/USO/XLE is
+  unavoidably a large fraction of a ~$250 account — this is concentration risk
+  from account size, not a mistake; it's why only one Tier B position is
+  allowed open at a time).
+- **Max concurrent Tier B positions: 1** (sizing concentration means a second
+  one could exceed available equity).
+- Max total open risk (Tier B only): **2% of equity** (== one position's risk,
+  since only one is ever open).
+- **Buying-power precondition:** before staging a Tier B trade, confirm
+  buying power covers the **full share cost** (`shares × entry`), not just the
+  risk-sized dollar amount — concentrated whole-share positions are often
+  gated by raw affordability before the risk math ever matters. If buying power
+  can't cover even 1 share, that's "no action," not a bug to route around.
+
+**Both tiers, unchanged:**
+- **Max open positions across the whole account: 3** (Tier A + Tier B combined).
+- **Daily kill switch: −1.5% realized P&L** halts new entries for the day, both tiers.
+- R:R ≥ 1.8 and the Step 4 confirmation bar are identical in both tiers — only
+  the dollar-sizing mechanics differ, never the entry-quality bar.
+
+These caps are enforced in Step 6 and the routines below. Change them only when
+the human explicitly says so.
 
 **Note on shared account exposure:** this account may run other automated
 strategies (other watchlists on it are marked "auto-maintained by" other bots).
@@ -38,22 +69,25 @@ plainly rather than assuming it's a Wyckoff-side issue.
 All candidates live in the Robinhood watchlist **"Wyckoff Watch"**, maintained by
 the daily scan routine. Current classification (updated by the Sunday routine):
 
-| Symbol | Status | Note |
-|---|---|---|
-| **GLD** | ✅ Approved | Primary — gold, liquid, sentiment-driven, no roll decay |
-| **SPY** | ✅ Approved | Broad index, deepest liquidity |
-| **USO** | ✅ Approved | Oil, strongest profit factor across both reviews |
-| **GDX** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
-| **QQQ** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (15 trades) — treat cautiously until it clears a live trigger |
-| **IWM** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (13 trades), weakest PF of the approved set — treat cautiously |
-| **XLE** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
-| **SLV** | ❌ Excluded | Failed validation both reviews — barely positive and outlier-dependent — analyze only, never execute |
+| Symbol | Status | Sizing tier | Note |
+|---|---|---|---|
+| **GLD** | ✅ Approved | A (analyze-only) | Primary — gold, liquid, sentiment-driven, no roll decay |
+| **SPY** | ✅ Approved | A (analyze-only) | Broad index, deepest liquidity |
+| **USO** | ✅ Approved | **B (live)** | Oil, strongest profit factor across both reviews |
+| **GDX** | ✅ Approved (provisional) | **B (live)** | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
+| **QQQ** | ✅ Approved (provisional) | A (analyze-only) | Promoted 2026-08-02; small sample (15 trades) — treat cautiously until it clears a live trigger |
+| **IWM** | ✅ Approved (provisional) | A (analyze-only) | Promoted 2026-08-02; small sample (13 trades), weakest PF of the approved set — treat cautiously |
+| **XLE** | ✅ Approved (provisional) | **B (live)** | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
+| **SLV** | ❌ Excluded | — | Failed validation both reviews — barely positive and outlier-dependent — analyze only, never execute |
 
 Only trade the **Approved** set. "Provisional" entries passed the mechanical
 go/no-go rule on a small sample (2-year, script-free walk-forward) — weight
 them below GLD/SPY/USO until they've each produced a couple of live outcomes.
 Everything Excluded is analysis/context only — report on it if asked, but
-never place an order against it.
+never place an order against it. **Tier A symbols will keep rounding to 0
+shares given current account size** — analyze and report on them every run,
+but don't expect them to place until the account grows. **Only GDX/USO/XLE
+(Tier B) can actually execute right now.**
 
 ## What you're exploiting (context)
 
@@ -205,34 +239,40 @@ would rather keep it broker-only for simplicity, place a single `stop_market` at
 `raw_stop` — just accept it can occasionally be wicked; the wide buffer minimizes
 it.)
 
-**Sizing follows the stop, and uses the testing-mode risk fraction.** A wider,
-wick-safe stop means you buy **fewer shares** so the dollar risk stays fixed at
-the small testing-mode budget:
+**Sizing follows the stop, and uses the symbol's sizing tier** (see Position
+sizing tiers above — Tier B is GDX/USO/XLE only; everything else is Tier A):
 
 ```
 risk_per_share = entry − raw_stop
-shares         = floor( 0.0010 × equity / risk_per_share )   # 0.10% testing-mode risk
+risk_pct       = 0.020 if symbol in {GDX, USO, XLE} else 0.0010   # Tier B vs Tier A
+shares         = floor( risk_pct × equity / risk_per_share )
 ```
 
 Never tighten the stop into the wick zone just to buy more shares — if that's
-the only way to clear the position-size floor, skip the trade instead.
+the only way to clear the position-size floor, skip the trade instead. For
+Tier A symbols, a 0-share result is expected and not a bug — report it as such.
 
 **Targets & reward:risk.** Target 1 = range **resistance**; Target 2 = resistance
 + range height (measured move). **Reward:risk = (Target 1 − entry) /
-risk_per_share must be ≥ 1.8** to act.
+risk_per_share must be ≥ 1.8** to act — same bar in both tiers.
 
-**Hard caps (never exceed — testing-mode values from above):**
-- ≤ **5%** of equity in one name (cap `shares × entry`).
-- ≤ **3** open positions total.
-- ≤ **0.5%** of equity in total open risk across all positions.
+**Hard caps (never exceed):**
+- Tier A (GLD, SPY, QQQ, IWM): ≤ **5%** of equity in one name; ≤ **0.5%** of
+  equity in total open Tier A risk.
+- Tier B (GDX, USO, XLE): ≤ **50%** of equity in one name; **at most 1** Tier B
+  position open at a time; ≤ **2%** of equity in open Tier B risk. Before
+  staging, confirm buying power covers the **full share cost**
+  (`shares × entry`), not just the risk-sized dollar amount.
+- **≤ 3 open positions total**, Tier A + Tier B combined.
 - **Kill switch:** if realized P&L today ≤ **−1.5%** of equity, **no new entries**
-  today (see the shared-account note above — this reads the whole account).
-- **Gap awareness:** stops can gap through overnight; keep size small — the cap
+  today, either tier (see the shared-account note above — this reads the whole account).
+- **Gap awareness:** stops can gap through overnight; Tier B positions are large
+  relative to equity, so a gap-through hurts more in dollar terms — the cap
   above assumes the stop holds, and it won't always.
 - **Long-only** unless the human has explicitly enabled shorting (margin).
 - Only trade symbols in the **Approved** row of the Universe table.
 
-### Worked example (illustrative — replace with live numbers each run)
+### Worked example — Tier A (illustrative — replace with live numbers each run)
 
 ```
 support 68.00 · resistance 77.50 · range_height 9.50 · ATR 1.30 · equity 10,000
@@ -246,6 +286,22 @@ R:R      = (77.50 − 68.60) / 2.68 = 3.3   ✅ ≥ 1.8
 Layer 1  = exit if a daily bar closes < 66.90
 Layer 2  = broker stop_market GTC @ 65.92
 ```
+
+### Worked example — Tier B (GDX-scale, this account's actual equity)
+
+```
+support 69.74 · resistance 89.99 · range_height 20.25 · ATR 3.00 · equity 248
+spring low = 82.00 (undercut), closed 84.50
+buffer   = max(0.75×3.00, 0.10×20.25) = max(2.25, 2.03) = 2.25
+raw_stop = 82.00 − 2.25 = 79.75
+entry    = 84.50
+risk/sh  = 84.50 − 79.75 = 4.75
+shares   = floor(0.020×248 / 4.75) = floor(4.96/4.75) = 1   → $84.50 (34% of equity)
+R:R      = (89.99 − 84.50) / 4.75 = 1.16   ❌ < 1.8 — this specific example would be REJECTED
+```
+(Shown to make the mechanics concrete, including a realistic failure — Tier B's
+larger risk budget still has to clear R:R ≥ 1.8 and buying power like anything
+else. A trade only proceeds if every check passes, same as Tier A.)
 
 ## Sentiment & market-regime gate (check before ANY new long)
 
@@ -337,8 +393,11 @@ GLD — SPRING in an accumulation range
   confirms (3/4): RSI divergence 38 vs 22 · OBV held · volume dry-up
   entry ~68.60 · thesis-exit on close < 66.90 · broker stop 65.92 · R:R 3.3
   targets 77.50 / 87.00
-  size (testing mode, 0.10% risk): 3 shares (~$206, 2.1% of equity)
+  size (Tier A, 0.10% risk): 3 shares (~$206, 2.1% of equity)
   => ACTIONABLE. Place it?
+```
+(For a Tier B symbol — GDX/USO/XLE — state the tier and risk fraction the same
+way, e.g. "size (Tier B, 2% risk): 1 share (~$84, 34% of equity)".)
 ```
 
 If any rule fails, say which one and mark it **advisory only** — do not place.
@@ -386,7 +445,8 @@ Every stop adjustment is an order change → same **review → confirm → place
 - Never place/cancel an order without explicit per-order confirmation.
 - Never use a naked market order — always a marketable **limit** (price protection).
 - Never trade a non-`agentic_allowed` account.
-- Never exceed the testing-mode risk caps or trade through the daily kill switch.
+- Never exceed the sizing-tier caps for that symbol, or trade through the daily kill switch.
+- Never apply Tier B's risk fraction to a Tier A symbol, or vice versa.
 - Never enter without a protective stop placed.
 - Never trade a symbol that isn't in the **Approved** set.
 - **Never chase the wick** — no entry while price is spiking intraday below
@@ -395,8 +455,8 @@ Every stop adjustment is an order change → same **review → confirm → place
   always below the spring low with the ATR buffer.
 - **Never tighten the stop into the wick zone to buy more shares** — size follows
   the stop, not the reverse.
-- Never increase the testing-mode sizing without an explicit human instruction to
-  do so.
+- Never change the sizing-tier assignments or risk fractions without an explicit
+  human instruction to do so.
 - This is **not financial advice**; markets can lose money. When unsure, ask.
 
 ## Quick manual run
@@ -434,8 +494,10 @@ reply. Only the human can approve a real trade.
 - **Trades?** Only after the human replies "yes" to the staged plan.
 - **Does:** account + portfolio check → propose position-management actions
   (break-even move, trail, partial at target, thesis-stop exit) → sentiment gate →
-  pick at most **one** best Approved-set setup passing all Step 6 caps → call
-  `review_equity_order` to get real cost/alerts → present ONE plan and stop.
+  pick at most **one** best Approved-set setup passing all Step 6 caps for its
+  **sizing tier** (Tier A: GLD/SPY/QQQ/IWM, will keep rounding to 0 shares until
+  funded; Tier B: GDX/USO/XLE, the only symbols that can currently execute) →
+  call `review_equity_order` to get real cost/alerts → present ONE plan and stop.
   **Only on explicit approval** does it place the limit entry and the protective
   stop, per Step 8.
 
