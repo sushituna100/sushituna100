@@ -175,6 +175,34 @@ export async function runAgent(
     return [...names].sort();
   };
 
+  /** Validate, evaluate, and emit a proposal for a document. Shared by the normal
+   *  tool-call path and the plain-text recovery path below. */
+  function proposeDocument(
+    intendedTool: "create_document" | "update_document" | undefined,
+    docName: string,
+    doc: CadDocument,
+    rationale: string,
+  ): { ok: boolean; report: string } {
+    const exists = listDocs().includes(docName);
+    if (intendedTool === "create_document" && exists) {
+      return { ok: false, report: `ERROR: document "${docName}" already exists. Use update_document.` };
+    }
+    if (intendedTool === "update_document" && !exists) {
+      return { ok: false, report: `ERROR: document "${docName}" does not exist. Use create_document.` };
+    }
+    const check = validateDocument(doc);
+    if (!check.ok) {
+      return {
+        ok: false,
+        report: `VALIDATION ERRORS (document NOT proposed):\n${check.errors.map((e) => `  - ${e}`).join("\n")}`,
+      };
+    }
+    const report = evaluationReport(doc);
+    overlay.set(docName, doc);
+    emit({ type: "proposal", name: docName, document: doc, created: !exists, rationale });
+    return { ok: true, report: `Proposed. The user now sees this in their viewport.\n${report}` };
+  }
+
   function handleTool(name: string, input: Record<string, unknown>): string {
     switch (name) {
       case "list_documents": {
@@ -190,32 +218,58 @@ export async function runAgent(
       }
       case "create_document":
       case "update_document": {
-        const docName = String(input.name);
-        if (name === "create_document" && listDocs().includes(docName)) {
-          return `ERROR: document "${docName}" already exists. Use update_document.`;
-        }
-        if (name === "update_document" && !listDocs().includes(docName)) {
-          return `ERROR: document "${docName}" does not exist. Use create_document.`;
-        }
-        const doc = input.document as CadDocument;
-        const check = validateDocument(doc);
-        if (!check.ok) {
-          return `VALIDATION ERRORS (document NOT proposed):\n${check.errors.map((e) => `  - ${e}`).join("\n")}`;
-        }
-        const report = evaluationReport(doc);
-        overlay.set(docName, doc);
-        emit({
-          type: "proposal",
-          name: docName,
-          document: doc,
-          created: name === "create_document",
-          rationale: input.rationale ?? "",
-        });
-        return `Proposed. The user now sees this in their viewport.\n${report}`;
+        const { report } = proposeDocument(
+          name as "create_document" | "update_document",
+          String(input.name),
+          input.document as CadDocument,
+          String(input.rationale ?? ""),
+        );
+        return report;
       }
       default:
         return `Unknown tool "${name}"`;
     }
+  }
+
+  /**
+   * Small local models occasionally ignore the function-calling protocol and
+   * print the document as JSON directly in their chat reply instead of calling
+   * update_document/create_document. Recover the edit from the reply text
+   * rather than silently losing it (and dumping raw JSON into the chat).
+   * Looks for a ```json fenced block first, then a balanced top-level {...}.
+   */
+  function extractDocumentFromText(
+    text: string,
+  ): { doc: CadDocument; before: string; after: string } | null {
+    const tryParse = (candidate: string, start: number, end: number) => {
+      try {
+        const json = JSON.parse(candidate);
+        if (json && typeof json === "object" && "version" in json && "features" in json) {
+          return { doc: json as CadDocument, before: text.slice(0, start).trim(), after: text.slice(end).trim() };
+        }
+      } catch {
+        /* not valid/matching JSON, fall through */
+      }
+      return null;
+    };
+
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence && fence.index !== undefined) {
+      const result = tryParse(fence[1], fence.index, fence.index + fence[0].length);
+      if (result) return result;
+    }
+
+    const start = text.indexOf("{");
+    if (start === -1) return null;
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") {
+        depth--;
+        if (depth === 0) return tryParse(text.slice(start, i + 1), start, i + 1);
+      }
+    }
+    return null;
   }
 
   const messages: ChatCompletionMessageParam[] = [
@@ -233,14 +287,26 @@ export async function runAgent(
 
       const choice = response.choices[0];
       const message = choice.message;
+      const toolCalls = message.tool_calls ?? [];
+
+      if (toolCalls.length === 0) {
+        const recovered = message.content ? extractDocumentFromText(message.content) : null;
+        if (recovered) {
+          if (recovered.before) emit({ type: "text", text: recovered.before });
+          const docName = recovered.doc.name || req.activeDocument || "untitled";
+          emit({ type: "tool_start", name: "update_document", input: { name: docName } });
+          const { ok, report } = proposeDocument(undefined, docName, recovered.doc, recovered.after);
+          emit({ type: "tool_result", name: "update_document", ok });
+          emit({ type: "text", text: ok ? report : `The model wrote a document directly instead of calling a tool, and it didn't validate:\n${report}` });
+        } else if (message.content && message.content.trim()) {
+          emit({ type: "text", text: message.content });
+        }
+        break;
+      }
 
       if (message.content && message.content.trim()) {
         emit({ type: "text", text: message.content });
       }
-
-      const toolCalls = message.tool_calls ?? [];
-      if (toolCalls.length === 0) break;
-
       messages.push({ role: "assistant", content: message.content ?? null, tool_calls: toolCalls });
 
       for (const call of toolCalls) {
