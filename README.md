@@ -21,8 +21,8 @@ thesis and roadmap.
 
 | Layer | What it does |
 |---|---|
-| **CAD kernel** (`src/kernel/`) | Parametric feature timeline → solid bodies. Sketches (rect / circle / slot / n-gon / polygon, holes), extrude, revolve, primitives, booleans, transform, mirror, linear & circular patterns. Expression-driven parameters (`base_w / 2 - 4`). BVH-accelerated mesh CSG (three-bvh-csg). Mass properties (volume, mass, surface area, center of mass, bbox) and binary STL export. |
-| **Workspace UI** (`src/ui/`) | Fusion 360-style ribbon (Solid / Sketch / Modify / Inspect), 3D viewport (Z-up, orbit, view presets, click-to-select, click-to-draw sketching on any plane), feature timeline with edit / suppress / reorder / delete, browser panel with live parameters and mass properties. |
+| **CAD kernel** (`src/kernel/`) | Parametric feature timeline → solid bodies. Sketches (rect / circle / slot / n-gon / polygon, holes), extrude (with optional draft/taper angle), revolve, loft between 2+ profiles, shell (hollow an extruded body, open top), primitives, booleans, transform, mirror, linear & circular patterns. Expression-driven parameters (`base_w / 2 - 4`). BVH-accelerated mesh CSG (three-bvh-csg). Mass properties (volume, mass, surface area, center of mass, bbox) and binary STL export. |
+| **Workspace UI** (`src/ui/`) | Fusion 360-style ribbon (Solid / Sketch / Modify / Inspect), 3D viewport (Z-up, orbit, view presets, click-to-select, click-to-draw sketching on any plane, section view), feature timeline with edit / suppress / reorder / delete, browser panel with live parameters and mass properties. |
 | **AI copilot** (`server/agent.ts`) | Agent over a local, open-source LLM served by [Ollama](https://ollama.com) (no cloud API key), with tools: `list_documents`, `read_document`, `mass_properties`, `update_document`, `create_document`. Reads the whole project folder, iterates against evaluation feedback (geometry errors + measured mass properties) until targets are met, and streams proposals to the client over SSE. |
 | **Project store** (`server/projects.ts`) | A project is just a folder of `*.cad.json` files — diffable, git-friendly, reviewable. |
 
@@ -87,10 +87,15 @@ The full schema the AI works against is in [`server/schema.ts`](server/schema.ts
 
 ## Architecture & roadmap
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Headline items on the path to production:
-swap the mesh-CSG evaluator for a true B-rep kernel (OpenCascade via WASM) behind the same document
-schema, constraint-based sketches, STEP import/export, multi-user CRDT editing, and org-wide
-"design system" context (fastener libraries, DFM rules) for the agent.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Headline item on the path to production: swap the
+mesh-CSG evaluator for a true B-rep kernel behind the same document schema — [OpenCascade](https://dev.opencascade.org/)
+(the kernel under FreeCAD) via its WASM port [opencascade.js](https://github.com/donalffons/opencascade.js),
+most likely through [replicad](https://replicad.xyz/)'s ergonomic TypeScript API on top of it. That
+unlocks true edge fillets/chamfers, robust general shelling, and STEP import/export — things that
+are fundamentally hard to do well on a mesh-CSG kernel, which is why loft/draft/shell in the
+current kernel are deliberately scoped to the cases that *are* tractable on meshes (see
+`src/kernel/evaluate.ts`). Also on the roadmap: constraint-based sketches, multi-user CRDT editing,
+and org-wide "design system" context (fastener libraries, DFM rules) for the agent.
 
 ## Environment
 

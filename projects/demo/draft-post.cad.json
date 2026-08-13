@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "name": "draft-post",
+  "units": "mm",
+  "description": "Draft-angle extrude demo: an injection-molded-style mounting post, narrower at the top for easy mold release.",
+  "material": { "name": "ABS", "density": 1.05 },
+  "parameters": [
+    { "name": "base_size", "expr": 16, "comment": "base width/depth" },
+    { "name": "post_h", "expr": 30, "comment": "post height" },
+    { "name": "draft", "expr": 3, "comment": "draft angle, degrees" }
+  ],
+  "features": [
+    {
+      "id": "sk_post",
+      "type": "sketch",
+      "name": "Post profile",
+      "plane": { "plane": "XY", "offset": 0 },
+      "entities": [
+        { "id": "e_post", "kind": "rect", "cx": 0, "cy": 0, "width": "base_size", "height": "base_size", "cornerRadius": 2 }
+      ]
+    },
+    {
+      "id": "ex_post",
+      "type": "extrude",
+      "name": "Post",
+      "sketch": "sk_post",
+      "distance": "post_h",
+      "draftAngle": "draft",
+      "op": "new"
+    }
+  ]
+}

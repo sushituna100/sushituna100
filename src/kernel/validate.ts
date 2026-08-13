@@ -15,6 +15,8 @@ const FEATURE_TYPES = new Set([
   "transform",
   "mirror",
   "pattern",
+  "loft",
+  "shell",
 ]);
 
 const ENTITY_KINDS = new Set(["rect", "circle", "polygon", "slot", "ngon"]);
@@ -113,6 +115,23 @@ export function validateDocument(doc: unknown): { ok: boolean; errors: string[] 
         if (typeof f.body !== "string") errors.push(`${label}: needs a body id`);
         if (f.kind !== "linear" && f.kind !== "circular") errors.push(`${label}: pattern kind must be linear or circular`);
         if (f.kind === "linear" && !f.spacing) errors.push(`${label}: linear pattern needs spacing [x,y,z]`);
+        break;
+      }
+      case "loft": {
+        if (!Array.isArray(f.sections) || f.sections.length < 2) {
+          errors.push(`${label}: loft needs at least 2 sketch sections`);
+          break;
+        }
+        for (const sid of f.sections) {
+          if (!sketchIds.has(sid)) {
+            errors.push(`${label}: references sketch "${sid}" which does not appear earlier in the timeline`);
+          }
+        }
+        break;
+      }
+      case "shell": {
+        if (typeof f.target !== "string") errors.push(`${label}: shell needs a target extrude feature id`);
+        if (f.wall === undefined) errors.push(`${label}: shell needs a wall thickness`);
         break;
       }
     }

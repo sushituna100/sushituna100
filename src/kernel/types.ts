@@ -107,9 +107,38 @@ export interface ExtrudeFeature extends FeatureBase {
   distance: Expr;
   /** 1 = along plane normal, -1 = opposite, "symmetric" = both ways, half each side. */
   direction?: 1 | -1 | "symmetric";
+  /** Degrees. Positive tapers the profile inward toward the top (draft angle),
+   *  approximated as a uniform scale of the profile about its centroid — exact
+   *  for circular/regular profiles, approximate for irregular ones. */
+  draftAngle?: Expr;
   op: BooleanOp;
   /** Body id to combine with for join/cut/intersect. Defaults to the first body. */
   target?: string;
+}
+
+/**
+ * Loft between 2+ sketch profiles (in timeline order), ribboning corresponding
+ * boundary points between consecutive sections. Each referenced sketch must
+ * have exactly one solid (non-hole) entity — no holes in loft sections in v1.
+ */
+export interface LoftFeature extends FeatureBase {
+  type: "loft";
+  /** Sketch feature ids, in the order they should be connected, 2 or more. */
+  sections: string[];
+  op: BooleanOp;
+  target?: string;
+}
+
+/**
+ * Hollow out a body created by a single earlier extrude feature with a
+ * rect/circle/ngon profile, removing the top face (the common open-top
+ * enclosure/cup case). Not general mesh offsetting — see evaluate.ts.
+ */
+export interface ShellFeature extends FeatureBase {
+  type: "shell";
+  /** id of the extrude feature whose body should be hollowed. */
+  target: string;
+  wall: Expr;
 }
 
 export interface RevolveFeature extends FeatureBase {
@@ -185,7 +214,9 @@ export type Feature =
   | CombineFeature
   | TransformFeature
   | MirrorFeature
-  | PatternFeature;
+  | PatternFeature
+  | LoftFeature
+  | ShellFeature;
 
 export type FeatureType = Feature["type"];
 

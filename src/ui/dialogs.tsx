@@ -341,8 +341,65 @@ function FeatureDialog({ dialog }: { dialog: Extract<DialogKind, { kind: "featur
               <option value="symmetric">Symmetric</option>
             </select>
           </Row>
+          <Row label="Draft angle ° (0 = none)"><input value={v.draftAngle} onChange={set("draftAngle")} /></Row>
           <Row label="Operation">{opSelect}</Row>
           {v.op !== "new" && <Row label="Target">{targetSelect}</Row>}
+        </>
+      )}
+      {t === "loft" && (
+        <>
+          <Row label="Sections (in order)">
+            <div className="loft-sections">
+              {v.sections.split(",").filter(Boolean).map((sid, i) => (
+                <div key={i} className="loft-section-row">
+                  <select
+                    value={sid}
+                    onChange={(e) => {
+                      const parts = v.sections.split(",").filter(Boolean);
+                      parts[i] = e.target.value;
+                      setV({ ...v, sections: parts.join(",") });
+                    }}
+                  >
+                    {sketches.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name ?? s.id}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      const parts = v.sections.split(",").filter(Boolean);
+                      parts.splice(i, 1);
+                      setV({ ...v, sections: parts.join(",") });
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  const parts = v.sections.split(",").filter(Boolean);
+                  const next = sketches.find((s) => !parts.includes(s.id))?.id ?? sketches[0]?.id ?? "";
+                  if (next) setV({ ...v, sections: [...parts, next].join(",") });
+                }}
+                disabled={sketches.length === 0}
+              >
+                + Add section
+              </button>
+            </div>
+          </Row>
+          <Row label="Operation">{opSelect}</Row>
+          {v.op !== "new" && <Row label="Target">{targetSelect}</Row>}
+        </>
+      )}
+      {t === "shell" && (
+        <>
+          <Row label="Body (from a simple extrude)">{bodySelect("target")}</Row>
+          <Row label="Wall thickness"><input value={v.wall} onChange={set("wall")} /></Row>
+          <div className="ribbon-note" style={{ padding: "4px 0" }}>
+            Hollows the body, leaving the top open — the common enclosure/cup case. The body must
+            come from a single extrude with a rect, circle, or n-gon profile.
+          </div>
         </>
       )}
       {t === "revolve" && (
@@ -508,7 +565,7 @@ function initialValues(
       };
     case "extrude":
       return { sketch: g("sketch", defaults.firstSketch), distance: g("distance", "10"),
-        direction: g("direction", "1"), op: g("op", "new"), target: g("target", "") };
+        direction: g("direction", "1"), draftAngle: g("draftAngle", "0"), op: g("op", "new"), target: g("target", "") };
     case "revolve":
       return { sketch: g("sketch", defaults.firstSketch), axis: g("axis", "y"),
         axisOffset: g("axisOffset", "0"), op: g("op", "new"), target: g("target", "") };
@@ -529,6 +586,11 @@ function initialValues(
       return { body: g("body", defaults.firstBody), patKind: g("kind", "linear"), count: g("count", "3"),
         sx: arr("spacing", 0, "20"), sy: arr("spacing", 1, "0"), sz: arr("spacing", 2, "0"),
         axis: g("axis", "z"), totalAngle: g("totalAngle", "360") };
+    case "loft":
+      return { sections: e ? (e.sections as string[]).join(",") : defaults.firstSketch,
+        op: g("op", "new"), target: g("target", "") };
+    case "shell":
+      return { target: g("target", defaults.firstBody), wall: g("wall", "2") };
   }
 }
 
@@ -541,6 +603,7 @@ function buildFeature(type: Feature["type"], v: Record<string, string>, existing
     case "extrude":
       return { id, type, sketch: v.sketch, distance: num(v.distance),
         direction: v.direction === "symmetric" ? "symmetric" : v.direction === "-1" ? -1 : 1,
+        draftAngle: num(v.draftAngle) || undefined,
         op: v.op as "new" | "join" | "cut" | "intersect",
         target: v.target || undefined };
     case "revolve":
@@ -576,5 +639,10 @@ function buildFeature(type: Feature["type"], v: Record<string, string>, existing
         axis: kind === "circular" ? (v.axis as "x" | "y" | "z") : undefined,
         totalAngle: kind === "circular" && v.totalAngle !== "360" ? num(v.totalAngle) : undefined };
     }
+    case "loft":
+      return { id, type, sections: v.sections.split(",").filter(Boolean),
+        op: v.op as "new" | "join" | "cut" | "intersect", target: v.target || undefined };
+    case "shell":
+      return { id, type, target: v.target, wall: num(v.wall) };
   }
 }

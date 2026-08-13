@@ -16,6 +16,9 @@ const BODY_COLOR = 0x9fb4c7;
 const BODY_SELECTED = 0xf5a623;
 const PROPOSAL_COLOR = 0x62d0a4;
 const EDGE_COLOR = 0x1c2126;
+/** Clips away the half of the model nearest the default camera position
+ *  (which sits at negative Y), revealing interior geometry on demand. */
+const SECTION_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 export function Viewport() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -36,6 +39,7 @@ export function Viewport() {
   const proposals = useStore((s) => s.proposals);
   const selection = useStore((s) => s.selection);
   const showSketches = useStore((s) => s.showSketches);
+  const sectionView = useStore((s) => s.sectionView);
   const sketchMode = useStore((s) => s.sketchMode);
 
   const hasProposal = activeDoc !== null && Boolean(proposals[activeDoc]);
@@ -53,6 +57,7 @@ export function Viewport() {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.localClippingEnabled = true;
     mount.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -128,6 +133,10 @@ export function Viewport() {
 
     if (!displayed) return;
 
+    // Section view: clip away the half of the model nearest the default
+    // camera position, revealing interior geometry (e.g. a shelled cavity).
+    const clipPlanes = sectionView ? [SECTION_PLANE] : [];
+
     for (const body of displayed.bodies) {
       const color = hasProposal ? PROPOSAL_COLOR : body.id === selection ? BODY_SELECTED : BODY_COLOR;
       const mat = new THREE.MeshStandardMaterial({
@@ -136,6 +145,8 @@ export function Viewport() {
         roughness: 0.55,
         transparent: hasProposal,
         opacity: hasProposal ? 0.92 : 1,
+        clippingPlanes: clipPlanes,
+        side: sectionView ? THREE.DoubleSide : THREE.FrontSide,
       });
       const mesh = new THREE.Mesh(body.geometry, mat);
       mesh.userData.bodyId = body.id;
@@ -146,7 +157,7 @@ export function Viewport() {
       // B-rep kernel upgrade (see roadmap).
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(body.geometry, 30),
-        new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.35 }),
+        new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.35, clippingPlanes: clipPlanes }),
       );
       mesh.add(edges);
     }
@@ -161,7 +172,7 @@ export function Viewport() {
         }
       }
     }
-  }, [displayed, selection, showSketches, hasProposal]);
+  }, [displayed, selection, showSketches, sectionView, hasProposal]);
 
   /* ---------- selection + sketch drawing ---------- */
   useEffect(() => {

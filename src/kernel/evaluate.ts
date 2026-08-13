@@ -5,6 +5,7 @@
  */
 
 import * as THREE from "three";
+import { ShapeUtils } from "three";
 import { ADDITION, Brush, Evaluator, INTERSECTION, SUBTRACTION } from "three-bvh-csg";
 import { evalExpr, resolveParameters } from "./expr";
 import { buildProfile, planeMatrix, planeNormal } from "./sketch";
@@ -13,8 +14,11 @@ import type {
   CadDocument,
   Expr,
   Feature,
+  LoftFeature,
   PatternFeature,
   PlaneName,
+  ShellFeature,
+  SketchEntity,
   SketchFeature,
 } from "./types";
 
@@ -208,11 +212,30 @@ export function evaluateDocument(doc: CadDocument): EvaluationResult {
         const dist = n(feature.distance);
         if (dist <= 0) throw new Error("Extrude distance must be > 0");
         const { shapes } = buildProfile(sk, params);
-        const geom = new THREE.ExtrudeGeometry(shapes, {
-          depth: dist,
-          bevelEnabled: false,
-          curveSegments: 24,
-        });
+
+        let geom: THREE.BufferGeometry;
+        const draftDeg = feature.draftAngle ? n(feature.draftAngle) : 0;
+        if (draftDeg !== 0) {
+          if (shapes.length !== 1 || shapes[0].holes.length > 0) {
+            throw new Error("draftAngle is only supported on a single hole-free profile in this version");
+          }
+          const shape = shapes[0];
+          const pts = shape.getPoints(64);
+          const centroid = new THREE.Vector2();
+          for (const p of pts) centroid.add(p);
+          centroid.divideScalar(pts.length);
+          const avgR = pts.reduce((s, p) => s + p.distanceTo(centroid), 0) / pts.length;
+          const delta = dist * Math.tan((draftDeg * Math.PI) / 180);
+          const scale = 1 - delta / avgR;
+          if (scale < 0.05) throw new Error("draftAngle too steep for this profile/depth (would collapse to a point)");
+          geom = buildLoftedSolid([
+            { shape, height: 0 },
+            { shape: scaleShapeAboutCentroid(shape, scale), height: dist },
+          ]);
+        } else {
+          geom = new THREE.ExtrudeGeometry(shapes, { depth: dist, bevelEnabled: false, curveSegments: 24 });
+        }
+
         const dir = feature.direction ?? 1;
         if (dir === -1) geom.translate(0, 0, -dist);
         else if (dir === "symmetric") geom.translate(0, 0, -dist / 2);
@@ -346,7 +369,79 @@ export function evaluateDocument(doc: CadDocument): EvaluationResult {
         evaluatePattern(feature);
         break;
       }
+
+      case "loft": {
+        evaluateLoft(feature);
+        break;
+      }
+
+      case "shell": {
+        evaluateShell(feature);
+        break;
+      }
     }
+  }
+
+  function evaluateLoft(feature: LoftFeature): void {
+    if (feature.sections.length < 2) throw new Error("Loft needs at least 2 sections");
+    const sks = feature.sections.map((id) => {
+      const sk = sketchFeatures.get(id);
+      if (!sk) throw new Error(`Sketch "${id}" not found (must appear earlier in the timeline)`);
+      return sk;
+    });
+    const planeName = sks[0].plane.plane;
+    if (sks.some((sk) => sk.plane.plane !== planeName)) {
+      throw new Error("All loft sections must be sketched on the same plane orientation in this version");
+    }
+    const sections = sks.map((sk) => {
+      const { shapes } = buildProfile(sk, params);
+      if (shapes.length !== 1 || shapes[0].holes.length > 0) {
+        throw new Error(`Loft section "${sk.id}" must have exactly one hole-free profile`);
+      }
+      return { shape: shapes[0], height: sk.plane.offset ? n(sk.plane.offset) : 0 };
+    });
+    const geom = buildLoftedSolid(sections);
+    applyMatrixFixed(geom, planeMatrix(planeName, 0));
+    ensureOutward(geom);
+    integrate(feature, geom, "Loft");
+  }
+
+  function evaluateShell(feature: ShellFeature): void {
+    const targetFeature = doc.features.find((f) => f.id === feature.target);
+    if (!targetFeature || targetFeature.type !== "extrude") {
+      throw new Error(`Shell target "${feature.target}" must be an earlier extrude feature`);
+    }
+    if ((targetFeature.direction ?? 1) !== 1) {
+      throw new Error("Shell only supports the default extrude direction in this version");
+    }
+    if (targetFeature.draftAngle) {
+      throw new Error("Shell does not support a drafted extrude target in this version");
+    }
+    const body = bodies.get(feature.target);
+    if (!body) throw new Error(`Body "${feature.target}" not found`);
+    const sk = sketchFeatures.get(targetFeature.sketch);
+    if (!sk) throw new Error(`Sketch "${targetFeature.sketch}" not found`);
+    if (sk.entities.length !== 1 || sk.entities[0].hole) {
+      throw new Error("Shell only supports a single-entity, hole-free profile in this version");
+    }
+    const wall = n(feature.wall);
+    if (wall <= 0) throw new Error("Shell wall thickness must be > 0");
+    const dist = n(targetFeature.distance);
+    if (wall >= dist) throw new Error("Shell wall thickness must be less than the extrude depth");
+
+    const insetEntity = insetEntityForShell(sk.entities[0], wall, params);
+    const { shapes } = buildProfile({ ...sk, entities: [insetEntity] }, params);
+    const cavityGeom = new THREE.ExtrudeGeometry(shapes, {
+      depth: dist - wall,
+      bevelEnabled: false,
+      curveSegments: 24,
+    });
+    cavityGeom.translate(0, 0, wall);
+    const planeOffset = sk.plane.offset ? n(sk.plane.offset) : 0;
+    applyMatrixFixed(cavityGeom, planeMatrix(sk.plane.plane, planeOffset));
+    ensureOutward(cavityGeom);
+
+    body.geometry = runCsg(body.geometry, cavityGeom, "cut");
   }
 
   function evaluatePattern(feature: PatternFeature): void {
@@ -435,6 +530,131 @@ function latheFromContour(
   ensureOutward(geom);
   geom.computeVertexNormals();
   return geom;
+}
+
+/** Resample a closed polyline to exactly `count` points, evenly spaced by arc
+ *  length, so profiles of differing original complexity (e.g. a rounded rect
+ *  vs. a plain circle) can be ribboned together point-for-point in a loft. */
+function resampleClosedPolyline(pts: THREE.Vector2[], count: number): THREE.Vector2[] {
+  const n = pts.length;
+  const segLen = (i: number) => pts[(i + 1) % n].distanceTo(pts[i]);
+  const cum: number[] = [];
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    cum.push(total);
+    total += segLen(i);
+  }
+  const out: THREE.Vector2[] = [];
+  for (let k = 0; k < count; k++) {
+    const target = (k / count) * total;
+    let i = 0;
+    while (i < n - 1 && cum[i + 1] <= target) i++;
+    const len = segLen(i) || 1e-9;
+    const t = (target - cum[i]) / len;
+    const a = pts[i],
+      b = pts[(i + 1) % n];
+    out.push(new THREE.Vector2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+  }
+  return out;
+}
+
+const LOFT_RING_SAMPLES = 80;
+
+/**
+ * Loft a solid connecting 2+ closed profiles (no holes) at given heights
+ * along a shared local Z axis. Side walls ribbon corresponding resampled
+ * boundary points between consecutive sections; only the first and last
+ * sections get end caps (triangulated from their original, unresampled
+ * shape for accuracy). Winding is analytically outward-facing by
+ * construction (verified: CCW profile boundary + increasing height → outward
+ * side-wall normals; bottom cap wound reversed, top cap natural).
+ */
+function buildLoftedSolid(sections: { shape: THREE.Shape; height: number }[]): THREE.BufferGeometry {
+  if (sections.length < 2) throw new Error("Loft needs at least 2 sections");
+  const rings = sections.map((s) => ({
+    pts: resampleClosedPolyline(s.shape.getPoints(64), LOFT_RING_SAMPLES),
+    height: s.height,
+  }));
+
+  const positions: number[] = [];
+  const pushTri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => {
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  };
+
+  for (let i = 0; i < rings.length - 1; i++) {
+    const r0 = rings[i],
+      r1 = rings[i + 1];
+    for (let k = 0; k < LOFT_RING_SAMPLES; k++) {
+      const k1 = (k + 1) % LOFT_RING_SAMPLES;
+      const a = new THREE.Vector3(r0.pts[k].x, r0.pts[k].y, r0.height);
+      const b = new THREE.Vector3(r0.pts[k1].x, r0.pts[k1].y, r0.height);
+      const c = new THREE.Vector3(r1.pts[k1].x, r1.pts[k1].y, r1.height);
+      const d = new THREE.Vector3(r1.pts[k].x, r1.pts[k].y, r1.height);
+      pushTri(a, b, c);
+      pushTri(a, c, d);
+    }
+  }
+
+  const capTriangles = (shape: THREE.Shape, height: number, flip: boolean) => {
+    const pts2 = shape.getPoints(64);
+    const tris = ShapeUtils.triangulateShape(pts2, []);
+    for (const [i0, i1, i2] of tris) {
+      const p0 = pts2[i0],
+        p1 = pts2[i1],
+        p2 = pts2[i2];
+      const a = new THREE.Vector3(p0.x, p0.y, height);
+      const b = new THREE.Vector3(p1.x, p1.y, height);
+      const c = new THREE.Vector3(p2.x, p2.y, height);
+      if (flip) pushTri(a, c, b);
+      else pushTri(a, b, c);
+    }
+  };
+  capTriangles(sections[0].shape, sections[0].height, true);
+  capTriangles(sections[sections.length - 1].shape, sections[sections.length - 1].height, false);
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.computeVertexNormals();
+  return geom;
+}
+
+/** Scale a shape's boundary about its own centroid — used to approximate a
+ *  draft/taper profile. Exact for circular/regular profiles; an approximation
+ *  (uniform scale rather than true per-edge offset) for irregular ones. */
+function scaleShapeAboutCentroid(shape: THREE.Shape, factor: number): THREE.Shape {
+  const pts = shape.getPoints(64);
+  const centroid = new THREE.Vector2();
+  for (const p of pts) centroid.add(p);
+  centroid.divideScalar(pts.length);
+  return new THREE.Shape(pts.map((p) => centroid.clone().add(p.clone().sub(centroid).multiplyScalar(factor))));
+}
+
+/** Only rect/circle/ngon entities can be inset for the shell feature (v1). */
+function insetEntityForShell(e: SketchEntity, wall: number, params: Record<string, number>): SketchEntity {
+  const val = (x: Expr) => evalExpr(x, params);
+  switch (e.kind) {
+    case "rect": {
+      const w = val(e.width) - 2 * wall;
+      const h = val(e.height) - 2 * wall;
+      if (w <= 0 || h <= 0) throw new Error(`Shell wall too thick for profile "${e.id}"`);
+      const r = e.cornerRadius ? Math.max(val(e.cornerRadius) - wall, 0) : undefined;
+      return { ...e, width: w, height: h, cornerRadius: r };
+    }
+    case "circle": {
+      const r = val(e.radius) - wall;
+      if (r <= 0) throw new Error(`Shell wall too thick for profile "${e.id}"`);
+      return { ...e, radius: r };
+    }
+    case "ngon": {
+      const r = val(e.radius) - wall;
+      if (r <= 0) throw new Error(`Shell wall too thick for profile "${e.id}"`);
+      return { ...e, radius: r };
+    }
+    default:
+      throw new Error(
+        `Shell only supports rect/circle/ngon profiles in this version (entity "${e.id}" is "${e.kind}")`,
+      );
+  }
 }
 
 function mirrorMatrix(plane: PlaneName, offset: number): THREE.Matrix4 {

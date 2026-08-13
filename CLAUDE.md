@@ -11,6 +11,22 @@ CAD kernel (`src/kernel/`), a Fusion-360-style ribbon UI (`src/ui/`), and an AI 
 viewport as accept/reject proposals. Full architecture: `docs/ARCHITECTURE.md`. Full
 product thesis: `docs/PRODUCT.md`. Top-level tour: `README.md`.
 
+## Kernel feature set + the B-rep question
+
+Current mesh-CSG kernel features: sketch, extrude (with optional `draftAngle`), revolve
+(full-360° only), primitives, booleans, transform, mirror, pattern, **loft** (2+ profiles,
+same plane orientation, one hole-free entity each), **shell** (hollows a single simple
+extrude, open top — rect/circle/ngon profiles only). Each new feature's evaluator code in
+`src/kernel/evaluate.ts` was verified against hand-computed analytic geometry (frustum-cone
+volume formula for loft, floor+wall volume for shell), not just "no errors thrown" — do the
+same for future kernel work, it's what actually catches sign/winding bugs.
+
+True edge fillets/chamfers and general (non-single-extrude) shelling are **not** implementable
+well on triangle meshes — don't attempt them here. The real path is swapping the evaluator for
+**OpenCascade** (the kernel under FreeCAD) via its WASM port `opencascade.js`, most likely
+through the `replicad` TypeScript API on top of it, behind the same document schema — this is
+a substantial, separate project, not an incremental patch to `evaluate.ts`.
+
 ## Current AI backend: local Ollama, not a cloud API
 
 The copilot originally used the Anthropic API directly. It now runs entirely against a

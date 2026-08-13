@@ -42,6 +42,7 @@ interface AppState {
   proposalEvaluation: EvaluationResult | null;
   selection: string | null;
   showSketches: boolean;
+  sectionView: boolean;
   ribbonTab: "solid" | "sketch" | "modify" | "inspect";
   dialog: DialogKind | null;
   sketchMode: SketchMode | null;
@@ -63,6 +64,7 @@ interface AppState {
   setDialog: (d: DialogKind | null) => void;
   setSketchMode: (m: SketchMode | null) => void;
   setShowSketches: (v: boolean) => void;
+  setSectionView: (v: boolean) => void;
   sendChat: (text: string) => Promise<void>;
   acceptProposal: (name: string) => Promise<void>;
   rejectProposal: (name: string) => void;
@@ -93,6 +95,7 @@ export const useStore = create<AppState>((set, get) => ({
   proposalEvaluation: null,
   selection: null,
   showSketches: true,
+  sectionView: false,
   ribbonTab: "solid",
   dialog: null,
   sketchMode: null,
@@ -191,6 +194,7 @@ export const useStore = create<AppState>((set, get) => ({
   setDialog: (d) => set({ dialog: d }),
   setSketchMode: (m) => set({ sketchMode: m, ribbonTab: m ? "sketch" : get().ribbonTab }),
   setShowSketches: (v) => set({ showSketches: v }),
+  setSectionView: (v) => set({ sectionView: v }),
   clearError: () => set({ error: null }),
 
   sendChat: async (text) => {

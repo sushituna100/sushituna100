@@ -74,18 +74,29 @@ injected into the system prompt.
 ## Known v0 limitations (deliberate scope cuts)
 
 - **Mesh CSG, not B-rep.** Booleans are triangle-mesh based: robust and fast, but no true faces/
-  edges — so no edge fillets/chamfers yet (sketch corner radii work), and tessellation seams show
-  in the edge overlay. The upgrade path is OpenCascade.js (WASM B-rep kernel) behind the *same*
-  document schema — the evaluator is the only layer that changes.
+  edges — so no *edge* fillets/chamfers on arbitrary geometry (sketch corner radii work, since
+  those are 2D and become vertical edges for free under extrude), and tessellation seams show in
+  the edge overlay. What mesh geometry *does* support well and is implemented: loft between
+  profiles, draft/taper on extrude (approximated as a uniform scale of the profile, exact for
+  circular/regular profiles), and shell for the common single-extrude open-top case (rect/circle/
+  n-gon profiles only — general shelling of arbitrary bodies needs true offset surfaces, which is
+  a B-rep-kernel problem). The upgrade path is OpenCascade — via its WASM port `opencascade.js`,
+  most likely through the `replicad` TypeScript API on top of it — behind the *same* document
+  schema; the evaluator (`src/kernel/evaluate.ts`) is the only layer that changes, so existing
+  part files keep working unmodified.
 - Revolve is full-360° only; partial revolves need caps (comes with B-rep).
+- Loft sections must share a plane orientation and be a single hole-free profile each; shell
+  targets a single simple extrude. Both throw a clear error outside that scope rather than
+  producing silently-wrong geometry — build the general case by hand with sketches+booleans.
 - Sketches are entity-based, not constraint-solved (no dimension/coincidence constraints yet).
 - No STEP/IGES import/export (STL export only).
 - Single-user; multi-user needs CRDT documents + server-authoritative evaluation.
 
 ## Production roadmap
 
-1. **B-rep kernel** — OpenCascade.js evaluator: fillets/chamfers/shell/draft, partial revolve,
-   sweeps/lofts, STEP import/export. Schema stays; documents survive the migration.
+1. **B-rep kernel** — OpenCascade (via `opencascade.js`/`replicad`) evaluator: true edge
+   fillets/chamfers, general shell, partial revolve, sweeps, STEP import/export. Schema stays;
+   documents survive the migration.
 2. **Constraint sketcher** — dimensions + geometric constraints (a small planar solver), which
    also gives the AI a richer editing vocabulary ("make these concentric").
 3. **Assemblies** — mates between parts; the agent designs *interfaces* explicitly.

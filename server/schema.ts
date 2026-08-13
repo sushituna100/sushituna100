@@ -43,7 +43,10 @@ Sketch coordinates (u,v) map: XY→(x,y), XZ→(x,z), YZ→(y,z).
 2. extrude — profile -> solid. op: "new" creates a body (body id = feature id);
 "join"/"cut"/"intersect" combine with "target" body (defaults to first body).
 direction: 1 (along plane normal, default), -1, or "symmetric".
+Optional "draftAngle" (degrees): tapers the profile inward toward the top (positive =
+narrower at top), for injection-molded/cast-part draft. Only on a single hole-free profile.
 { "id": "ex1", "type": "extrude", "sketch": "sk1", "distance": "base_t", "op": "new" }
+{ "id": "ex2", "type": "extrude", "sketch": "sk2", "distance": 20, "draftAngle": 3, "op": "new" }
 
 3. revolve — revolve profile around an axis IN SKETCH COORDINATES.
 axis "y" = vertical line u=axisOffset; axis "x" = horizontal line v=axisOffset.
@@ -67,6 +70,25 @@ the copy into the source; merge=false makes a new body (id = feature id).
 8. pattern — linear (spacing vector) or circular (axis x|y|z + totalAngle, default 360).
 merge=true (default) unions instances into the source body.
 { "id": "pat1", "type": "pattern", "kind": "circular", "body": "p1", "count": 6, "axis": "z" }
+
+9. loft — solid connecting 2+ sketch profiles (in "sections" order), ribboning corresponding
+boundary points between consecutive sections. ALL sections must be on the SAME plane
+orientation (e.g. all "XY", at different offsets = heights). Each section sketch must have
+exactly ONE entity and NO holes. Good for tapered/organic shapes a straight extrude can't do.
+{ "id": "sk_bottom", "type": "sketch", "plane": { "plane": "XY", "offset": 0 },
+  "entities": [{ "id": "e1", "kind": "circle", "cx": 0, "cy": 0, "radius": 20 }] }
+{ "id": "sk_top", "type": "sketch", "plane": { "plane": "XY", "offset": 40 },
+  "entities": [{ "id": "e2", "kind": "rect", "cx": 0, "cy": 0, "width": 30, "height": 30 }] }
+{ "id": "lf1", "type": "loft", "sections": ["sk_bottom", "sk_top"], "op": "new" }
+
+10. shell — hollow out a body from a single earlier extrude feature, leaving the top face
+open (the common enclosure/cup case) and a floor of thickness "wall". target must reference
+that extrude feature's id; its sketch must have exactly one rect/circle/ngon entity (no
+holes), and the extrude must use default direction with no draftAngle.
+{ "id": "sh1", "type": "shell", "target": "ex1", "wall": 2.5 }
+NOTE: for anything shell doesn't cover (multi-entity profiles, non-uniform wall thickness,
+closed bottom AND top with a hole instead), build it manually with two sketches + two
+extrudes + a cut, exactly like the enclosure-base sample part does.
 
 ## Rules and best practice
 - Feature ids must be unique, short, stable. NEVER change ids of existing features

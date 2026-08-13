@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "tapered-vase",
+  "units": "mm",
+  "description": "Loft demo: a vase shape connecting a narrow base circle to a wider rim circle.",
+  "material": { "name": "ABS", "density": 1.05 },
+  "parameters": [
+    { "name": "base_r", "expr": 20, "comment": "base radius" },
+    { "name": "rim_r", "expr": 35, "comment": "rim radius" },
+    { "name": "height", "expr": 80, "comment": "vase height" }
+  ],
+  "features": [
+    {
+      "id": "sk_base",
+      "type": "sketch",
+      "name": "Base",
+      "plane": { "plane": "XY", "offset": 0 },
+      "entities": [{ "id": "e_base", "kind": "circle", "cx": 0, "cy": 0, "radius": "base_r" }]
+    },
+    {
+      "id": "sk_rim",
+      "type": "sketch",
+      "name": "Rim",
+      "plane": { "plane": "XY", "offset": "height" },
+      "entities": [{ "id": "e_rim", "kind": "circle", "cx": 0, "cy": 0, "radius": "rim_r" }]
+    },
+    { "id": "lf_body", "type": "loft", "name": "Vase body", "sections": ["sk_base", "sk_rim"], "op": "new" }
+  ]
+}

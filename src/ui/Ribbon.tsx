@@ -51,6 +51,8 @@ export function Ribbon() {
   const setSketchMode = useStore((s) => s.setSketchMode);
   const showSketches = useStore((s) => s.showSketches);
   const setShowSketches = useStore((s) => s.setShowSketches);
+  const sectionView = useStore((s) => s.sectionView);
+  const setSectionView = useStore((s) => s.setSectionView);
 
   const noDoc = !doc;
   const noBody = !evaluation || evaluation.bodies.length === 0;
@@ -97,6 +99,8 @@ export function Ribbon() {
                 onClick={() => setDialog({ kind: "feature", featureType: "extrude" })} />
               <RibbonButton icon="◐" label="Revolve" disabled={noDoc || noSketch}
                 onClick={() => setDialog({ kind: "feature", featureType: "revolve" })} />
+              <RibbonButton icon="◭" label="Loft" disabled={noDoc || noSketch}
+                onClick={() => setDialog({ kind: "feature", featureType: "loft" })} />
             </Group>
             <Group label="Primitives">
               <RibbonButton icon="▧" label="Box" disabled={noDoc}
@@ -148,6 +152,8 @@ export function Ribbon() {
             <Group label="Boolean">
               <RibbonButton icon="⊕" label="Combine" disabled={noBody}
                 onClick={() => setDialog({ kind: "feature", featureType: "combine" })} />
+              <RibbonButton icon="▢" label="Shell" disabled={noBody}
+                onClick={() => setDialog({ kind: "feature", featureType: "shell" })} />
             </Group>
             <Group label="Placement">
               <RibbonButton icon="✥" label="Move/Rotate" disabled={noBody}
@@ -165,6 +171,9 @@ export function Ribbon() {
             <Group label="Display">
               <RibbonButton icon="▤" label={showSketches ? "Hide Sketches" : "Show Sketches"}
                 onClick={() => setShowSketches(!showSketches)} disabled={noDoc} />
+              <RibbonButton icon="◑" label="Section View" active={sectionView}
+                onClick={() => setSectionView(!sectionView)} disabled={noBody}
+                title="Cut away the near half of the model to see inside" />
             </Group>
             <Group label="Export">
               <RibbonButton icon="⬇" label="STL" disabled={noBody} onClick={downloadSTL} />

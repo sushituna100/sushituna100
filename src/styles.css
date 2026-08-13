@@ -214,6 +214,9 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 .form-row input:not([type="checkbox"]), .form-row select { flex: 1; min-width: 0; }
 .triple { display: flex; gap: 6px; flex: 1; }
 .triple input { width: 100%; min-width: 0; }
+.loft-sections { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.loft-section-row { display: flex; gap: 6px; align-items: center; }
+.loft-section-row select { flex: 1; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; }
 .param-table { width: 100%; border-collapse: collapse; }
 .param-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; padding: 2px 4px; }

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "name": "simple-cup",
+  "units": "mm",
+  "description": "Shell feature demo: a plain cylinder hollowed into an open-top cup with a uniform wall thickness.",
+  "material": { "name": "ABS", "density": 1.05 },
+  "parameters": [
+    { "name": "radius", "expr": 30, "comment": "outer radius" },
+    { "name": "height", "expr": 90, "comment": "cup height" },
+    { "name": "wall", "expr": 2.5, "comment": "wall + floor thickness" }
+  ],
+  "features": [
+    {
+      "id": "sk_outer",
+      "type": "sketch",
+      "name": "Outer profile",
+      "plane": { "plane": "XY", "offset": 0 },
+      "entities": [{ "id": "e_outer", "kind": "circle", "cx": 0, "cy": 0, "radius": "radius" }]
+    },
+    { "id": "ex_body", "type": "extrude", "name": "Body", "sketch": "sk_outer", "distance": "height", "op": "new" },
+    { "id": "sh_hollow", "type": "shell", "name": "Hollow out", "target": "ex_body", "wall": "wall" }
+  ]
+}

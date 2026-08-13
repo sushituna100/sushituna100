@@ -12,6 +12,8 @@ const ICONS: Record<Feature["type"], string> = {
   transform: "✥",
   mirror: "⧉",
   pattern: "⁘",
+  loft: "◭",
+  shell: "▢",
 };
 
 export function Timeline() {
