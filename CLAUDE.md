@@ -26,7 +26,7 @@ server on :8787. `GET /api/health` reports `{ aiReady, model }`.
 ## Known small-local-model reliability issues — already fixed once, watch for regressions
 
 Small local models (7-8B) are meaningfully less reliable than a frontier hosted model at
-following OpenAI-style tool/function calling. Two real failure modes were hit and fixed
+following OpenAI-style tool/function calling. Three real failure modes were hit and fixed
 in `server/agent.ts`; if similar symptoms reappear, look here first before assuming a new
 bug class:
 
@@ -50,11 +50,25 @@ bug class:
    automatically (bounded by `MAX_ITERATIONS = 24`). This is what makes one instruction
    run a full multi-step task unattended instead of stalling every turn.
 
-Both fixes were verified against mock Ollama servers reproducing the exact reported
-transcripts (see chat history / commit messages `1c53a3b` and `6f8edfa` for the mock
-harnesses used — they're not checked into the repo, just how the fix was validated) —
-worth doing the same (a small Express mock returning canned `/v1/chat/completions`
-responses) before believing a tool-calling fix actually works, since real Ollama+model
+3. **Model writes JS-style near-JSON instead of strict JSON** — `//` comments, trailing
+   commas, and bare unquoted CAD expressions as values (`"cy": -width/2 + wall*2` instead
+   of `"cy": "-width/2 + wall*2"`). `JSON.parse` throws on all of this, so both recovery
+   paths above were silently failing and falling through to dumping the raw broken JSON
+   into the chat as plain text — a bad experience even though the underlying cause (model
+   explaining a plan instead of acting) was already handled. Fixed by `repairLooseJson()` /
+   `parseJsonLoose()`: strips comments and trailing commas, wraps bare-identifier/expression
+   values in quotes via a targeted regex, tried once after a strict `JSON.parse` fails.
+   Also added `sanitizeUnparsedReply()` as a last-resort backstop: if recovery still fails
+   on something that looks like an attempted tool call or document, strip fenced code
+   blocks from what's shown to the user rather than ever dumping raw (possibly broken)
+   JSON into the chat.
+
+All three fixes were verified against mock Ollama servers reproducing the exact reported
+transcripts (see chat history / commit messages `1c53a3b`, `6f8edfa`, and the JSON-repair
+commit for the mock harnesses used — they're not checked into the repo, just how the fix
+was validated) — worth doing the same (a small Express mock returning canned
+`/v1/chat/completions` responses) before believing a tool-calling fix actually works, since
+real Ollama+model
 runs are slow to iterate on and non-deterministic.
 
 **If you hit a new variant of "the AI said it would do something but nothing happened,"**

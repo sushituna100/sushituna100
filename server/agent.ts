@@ -60,6 +60,53 @@ function scanBalancedObject(text: string, from = 0): { src: string; start: numbe
   return null;
 }
 
+/**
+ * Best-effort repair for near-JSON small models sometimes write instead of
+ * strict JSON: JS-style `//` comments, trailing commas, and bare unquoted CAD
+ * expressions as values (`"cy": -width/2 + wall*2` instead of a quoted
+ * string). Applied only after a strict JSON.parse attempt has already failed.
+ */
+function repairLooseJson(src: string): string {
+  let out = src.replace(/\/\/[^\n]*/g, "");
+  out = out.replace(/,(\s*[}\]])/g, "$1");
+  out = out.replace(
+    /("[a-zA-Z_]\w*"\s*:\s*)([^",{[\s][^,}\]]*)/g,
+    (whole: string, prefix: string, value: string) => {
+      const trimmed = value.trim();
+      if (/^(true|false|null)$/.test(trimmed)) return whole;
+      if (/^-?\d/.test(trimmed) && !/[a-zA-Z_(]/.test(trimmed)) return whole; // already a plain number
+      return `${prefix}"${trimmed.replace(/"/g, '\\"')}"`;
+    },
+  );
+  return out;
+}
+
+/** Strict parse, falling back to repairLooseJson() once before giving up entirely. */
+function parseJsonLoose(src: string): unknown {
+  try {
+    return JSON.parse(src);
+  } catch {
+    try {
+      return JSON.parse(repairLooseJson(src));
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/**
+ * Last resort when neither extractNarratedToolCall nor extractDocumentFromText
+ * could make sense of a reply (e.g. JSON broken beyond repair). A wall of
+ * malformed JSON is never a useful chat message — show only the surrounding
+ * prose, or an honest one-line admission if there isn't any.
+ */
+function sanitizeUnparsedReply(text: string): string {
+  const looksLikeFailedAttempt = /```/.test(text) || /\{\s*"(name|version)"\s*:/.test(text);
+  if (!looksLikeFailedAttempt) return text;
+  const prose = text.replace(/```[\s\S]*?```/g, "").trim();
+  return prose || "I tried to write out a change but it wasn't valid JSON, so nothing was applied. Could you ask again?";
+}
+
 const TOOLS: ChatCompletionTool[] = [
   {
     type: "function",
@@ -182,7 +229,12 @@ Always prefer the real function-calling mechanism to invoke a tool.
 If you are ever unable to use it, write exactly ONE line containing ONLY a JSON object of the
 form {"name": "<tool_name>", "arguments": { ... }} and STOP your reply immediately after that
 line — do not write anything else, and above all do not write a fabricated result. The system
-will execute the real tool and give you its true output as the next message.`;
+will execute the real tool and give you its true output as the next message.
+Whenever you write JSON — a tool call or a document, real or narrated — it must be strictly
+valid JSON: no // comments, no trailing commas, and every expression value must be a quoted
+string ("width/2 - 4"), never bare (width/2 - 4). Do not explain a plan with example JSON and
+then stop — either call the tool for real or write the single-line narrated call above; never
+just describe what you would do.`;
 }
 
 /** Ollama's OpenAI-compatible endpoint doesn't check the key; any non-empty string works. */
@@ -280,14 +332,10 @@ export async function runAgent(
     for (;;) {
       const found = scanBalancedObject(text, from);
       if (!found) return null;
-      try {
-        const parsed = JSON.parse(found.src) as { name?: unknown; arguments?: unknown };
-        if (typeof parsed.name === "string" && TOOL_NAMES.has(parsed.name)) {
-          const args = parsed.arguments && typeof parsed.arguments === "object" ? parsed.arguments : {};
-          return { toolName: parsed.name, args: args as Record<string, unknown>, before: text.slice(0, found.start).trim() };
-        }
-      } catch {
-        /* not valid JSON at this position, keep scanning */
+      const parsed = parseJsonLoose(found.src) as { name?: unknown; arguments?: unknown } | undefined;
+      if (parsed && typeof parsed.name === "string" && TOOL_NAMES.has(parsed.name)) {
+        const args = parsed.arguments && typeof parsed.arguments === "object" ? parsed.arguments : {};
+        return { toolName: parsed.name, args: args as Record<string, unknown>, before: text.slice(0, found.start).trim() };
       }
       from = found.end;
     }
@@ -305,13 +353,9 @@ export async function runAgent(
     text: string,
   ): { doc: CadDocument; before: string; after: string } | null {
     const tryParse = (candidate: string, start: number, end: number) => {
-      try {
-        const json = JSON.parse(candidate);
-        if (json && typeof json === "object" && "version" in json && "features" in json) {
-          return { doc: json as CadDocument, before: text.slice(0, start).trim(), after: text.slice(end).trim() };
-        }
-      } catch {
-        /* not valid/matching JSON, fall through */
+      const json = parseJsonLoose(candidate);
+      if (json && typeof json === "object" && "version" in json && "features" in json) {
+        return { doc: json as CadDocument, before: text.slice(0, start).trim(), after: text.slice(end).trim() };
       }
       return null;
     };
@@ -391,7 +435,7 @@ export async function runAgent(
         }
 
         if (message.content && message.content.trim()) {
-          emit({ type: "text", text: message.content });
+          emit({ type: "text", text: sanitizeUnparsedReply(message.content) });
         }
         break;
       }
