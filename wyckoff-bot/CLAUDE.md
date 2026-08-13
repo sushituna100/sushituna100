@@ -10,49 +10,37 @@ the scheduled routines are all defined here.
 
 **You propose. The human confirms. Only then do you place an order.** Never place
 or cancel an order without an explicit "yes" for that specific order in this
-conversation. "Run the check" / "look at GLD" is permission to *analyze*, never
+conversation. "Run the check" / "look at GDX" is permission to *analyze*, never
 to trade. When in doubt, stop and ask.
 
-## Position sizing tiers (current — do not change without explicit instruction)
+## Position sizing (current — do not change without explicit instruction)
 
 This account is small **on purpose** (deliberately kept tiny while the strategy
-proves itself), which creates a real constraint: at low risk fractions, a single
-share of a $700+ name (SPY, QQQ) or $400 name (GLD) never clears a nonzero
-share count — no *prudent* risk fraction fixes that without more capital. Rather
-than inflate risk account-wide to force those trades through, sizing is split
-into two tiers by symbol. **Decided 2026-08-10.**
+proves itself). **Decided 2026-08-13:** the universe now only contains symbols
+priced low enough to size a whole share on this account — expensive names
+(formerly tracked as "Tier A": GLD, SPY, QQQ, IWM) were removed entirely rather
+than kept as permanent 0-share analyze-only lines, because tracking symbols
+that structurally can't execute wastes analysis effort and produces zero data
+to validate the strategy against. See "Universe & watchlist" below for what's
+still tracked and why even that isn't guaranteed to be affordable today.
 
-**Tier A — default (GLD, SPY, QQQ, IWM: too expensive to size on this account):**
-- Risk per trade: **0.10% of equity**.
-- Max position: **5% of equity per name**.
-- Max total open risk (Tier A only): **0.5% of equity**.
-- These will keep rounding to 0 shares until the account is funded further —
-  that's expected, not a bug. Still analyze and report on them every run.
-
-**Tier B — live execution (GDX, USO, XLE only — priced low enough to size a
-whole share on this account):**
 - Risk per trade: **2% of equity** (elevated specifically to clear the
-  whole-share floor; accepted explicitly given the account is intentionally
-  small — do not extend this rate to Tier A symbols).
-- Max position: **50% of equity per name** (one share of GDX/USO/XLE is
+  whole-share floor on a small account — accepted explicitly, not a mistake).
+- Max position: **50% of equity per name** (one share of these symbols is
   unavoidably a large fraction of a ~$250 account — this is concentration risk
-  from account size, not a mistake; it's why only one Tier B position is
-  allowed open at a time).
-- **Max concurrent Tier B positions: 1** (sizing concentration means a second
-  one could exceed available equity).
-- Max total open risk (Tier B only): **2% of equity** (== one position's risk,
-  since only one is ever open).
-- **Buying-power precondition:** before staging a Tier B trade, confirm
-  buying power covers the **full share cost** (`shares × entry`), not just the
-  risk-sized dollar amount — concentrated whole-share positions are often
-  gated by raw affordability before the risk math ever matters. If buying power
-  can't cover even 1 share, that's "no action," not a bug to route around.
-
-**Both tiers, unchanged:**
-- **Max open positions across the whole account: 3** (Tier A + Tier B combined).
-- **Daily kill switch: −1.5% realized P&L** halts new entries for the day, both tiers.
-- R:R ≥ 1.8 and the Step 4 confirmation bar are identical in both tiers — only
-  the dollar-sizing mechanics differ, never the entry-quality bar.
+  from account size; it's why only one position is allowed open at a time).
+- **Max concurrent positions: 1** (sizing concentration means a second one
+  could exceed available equity).
+- Max total open risk: **2% of equity** (== one position's risk, since only
+  one is ever open).
+- **Buying-power precondition:** before staging a trade, confirm buying power
+  covers the **full share cost** (`shares × entry`), not just the risk-sized
+  dollar amount — concentrated whole-share positions are often gated by raw
+  affordability before the risk math ever matters. If buying power can't cover
+  even 1 share, that's "no action," not a bug to route around.
+- **Max open positions across the whole account: 3.**
+- **Daily kill switch: −1.5% realized P&L** halts new entries for the day.
+- R:R ≥ 1.8 and the Step 4 confirmation bar apply as written below.
 
 These caps are enforced in Step 6 and the routines below. Change them only when
 the human explicitly says so.
@@ -69,25 +57,37 @@ plainly rather than assuming it's a Wyckoff-side issue.
 All candidates live in the Robinhood watchlist **"Wyckoff Watch"**, maintained by
 the daily scan routine. Current classification (updated by the Sunday routine):
 
-| Symbol | Status | Sizing tier | Note |
-|---|---|---|---|
-| **GLD** | ✅ Approved | A (analyze-only) | Primary — gold, liquid, sentiment-driven, no roll decay |
-| **SPY** | ✅ Approved | A (analyze-only) | Broad index, deepest liquidity |
-| **USO** | ✅ Approved | **B (live)** | Oil, strongest profit factor across both reviews |
-| **GDX** | ✅ Approved (provisional) | **B (live)** | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
-| **QQQ** | ✅ Approved (provisional) | A (analyze-only) | Promoted 2026-08-02; small sample (15 trades) — treat cautiously until it clears a live trigger |
-| **IWM** | ✅ Approved (provisional) | A (analyze-only) | Promoted 2026-08-02; small sample (13 trades), weakest PF of the approved set — treat cautiously |
-| **XLE** | ✅ Approved (provisional) | **B (live)** | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
-| **SLV** | ❌ Excluded | — | Failed validation both reviews — barely positive and outlier-dependent — analyze only, never execute |
+| Symbol | Status | Note |
+|---|---|---|
+| **USO** | ✅ Approved | Oil, strongest profit factor across both reviews |
+| **GDX** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
+| **XLE** | ✅ Approved (provisional) | Promoted 2026-08-02; small sample (8 trades) — treat cautiously until it clears a live trigger |
+| **SLV** | ❌ Excluded | Failed validation both reviews — barely positive and outlier-dependent — analyze only, never execute |
+
+**Removed from the universe 2026-08-13** (were GLD, SPY, QQQ, IWM, tracked as
+"Tier A/analyze-only"): all priced high enough that no prudent risk fraction on
+this account ever cleared a nonzero share count — every run spent analysis
+effort on symbols that structurally could not produce a trade, which is exactly
+backwards for a strategy that needs live outcomes to validate itself. Cut
+entirely rather than kept as permanent 0-share lines. Their backtest history is
+preserved in git history if reconsidered later (e.g. if the account is funded
+significantly, which is explicitly not the current plan).
+
+**Important caveat, current as of 2026-08-13:** removing those four does *not*
+by itself guarantee trades happen — buying power on this account fluctuates
+(shared with other automated strategies) and has recently been *below* the
+share price of USO, GDX, **and** XLE simultaneously. This cut removes wasted
+tracking of symbols that can never work; it doesn't guarantee the remaining
+three are affordable on any given day. If buying power stays persistently
+below all three, that's a signal to revisit the universe again (see the
+human's standing instruction to prefer more, cheaper, tradeable names over
+fewer expensive ones).
 
 Only trade the **Approved** set. "Provisional" entries passed the mechanical
 go/no-go rule on a small sample (2-year, script-free walk-forward) — weight
-them below GLD/SPY/USO until they've each produced a couple of live outcomes.
-Everything Excluded is analysis/context only — report on it if asked, but
-never place an order against it. **Tier A symbols will keep rounding to 0
-shares given current account size** — analyze and report on them every run,
-but don't expect them to place until the account grows. **Only GDX/USO/XLE
-(Tier B) can actually execute right now.**
+them below USO until they've each produced a couple of live outcomes.
+SLV is analysis/context only — report on it if asked, but never place an
+order against it.
 
 ## What you're exploiting (context)
 
@@ -239,55 +239,37 @@ would rather keep it broker-only for simplicity, place a single `stop_market` at
 `raw_stop` — just accept it can occasionally be wicked; the wide buffer minimizes
 it.)
 
-**Sizing follows the stop, and uses the symbol's sizing tier** (see Position
-sizing tiers above — Tier B is GDX/USO/XLE only; everything else is Tier A):
+**Sizing follows the stop** (see Position sizing above):
 
 ```
 risk_per_share = entry − raw_stop
-risk_pct       = 0.020 if symbol in {GDX, USO, XLE} else 0.0010   # Tier B vs Tier A
+risk_pct       = 0.020
 shares         = floor( risk_pct × equity / risk_per_share )
 ```
 
 Never tighten the stop into the wick zone just to buy more shares — if that's
-the only way to clear the position-size floor, skip the trade instead. For
-Tier A symbols, a 0-share result is expected and not a bug — report it as such.
+the only way to clear the position-size floor, skip the trade instead.
 
 **Targets & reward:risk.** Target 1 = range **resistance**; Target 2 = resistance
 + range height (measured move). **Reward:risk = (Target 1 − entry) /
-risk_per_share must be ≥ 1.8** to act — same bar in both tiers.
+risk_per_share must be ≥ 1.8** to act.
 
 **Hard caps (never exceed):**
-- Tier A (GLD, SPY, QQQ, IWM): ≤ **5%** of equity in one name; ≤ **0.5%** of
-  equity in total open Tier A risk.
-- Tier B (GDX, USO, XLE): ≤ **50%** of equity in one name; **at most 1** Tier B
-  position open at a time; ≤ **2%** of equity in open Tier B risk. Before
-  staging, confirm buying power covers the **full share cost**
-  (`shares × entry`), not just the risk-sized dollar amount.
-- **≤ 3 open positions total**, Tier A + Tier B combined.
+- ≤ **50%** of equity in one name; **at most 1** position open at a time;
+  ≤ **2%** of equity in open risk. Before staging, confirm buying power covers
+  the **full share cost** (`shares × entry`), not just the risk-sized dollar
+  amount.
+- **≤ 3 open positions total** (this account also holds other automated
+  strategies' positions — see the shared-account note above).
 - **Kill switch:** if realized P&L today ≤ **−1.5%** of equity, **no new entries**
-  today, either tier (see the shared-account note above — this reads the whole account).
-- **Gap awareness:** stops can gap through overnight; Tier B positions are large
+  today (see the shared-account note above — this reads the whole account).
+- **Gap awareness:** stops can gap through overnight; positions here are large
   relative to equity, so a gap-through hurts more in dollar terms — the cap
   above assumes the stop holds, and it won't always.
 - **Long-only** unless the human has explicitly enabled shorting (margin).
 - Only trade symbols in the **Approved** row of the Universe table.
 
-### Worked example — Tier A (illustrative — replace with live numbers each run)
-
-```
-support 68.00 · resistance 77.50 · range_height 9.50 · ATR 1.30 · equity 10,000
-spring low = 66.90 (wicked 1.10 below support), closed 68.60
-buffer   = max(0.75×1.30, 0.10×9.50) = max(0.98, 0.95) = 0.98
-raw_stop = 66.90 − 0.98 = 65.92   (well below the wick, not at 67.90)
-entry    = 68.60 (on the test/confirmation close)
-risk/sh  = 68.60 − 65.92 = 2.68
-shares   = floor(0.0010×10,000 / 2.68) = floor(10/2.68) = 3   → $206 (2.1% of equity)
-R:R      = (77.50 − 68.60) / 2.68 = 3.3   ✅ ≥ 1.8
-Layer 1  = exit if a daily bar closes < 66.90
-Layer 2  = broker stop_market GTC @ 65.92
-```
-
-### Worked example — Tier B (GDX-scale, this account's actual equity)
+### Worked example (GDX-scale, this account's actual equity — illustrative, replace with live numbers each run)
 
 ```
 support 69.74 · resistance 89.99 · range_height 20.25 · ATR 3.00 · equity 248
@@ -299,9 +281,9 @@ risk/sh  = 84.50 − 79.75 = 4.75
 shares   = floor(0.020×248 / 4.75) = floor(4.96/4.75) = 1   → $84.50 (34% of equity)
 R:R      = (89.99 − 84.50) / 4.75 = 1.16   ❌ < 1.8 — this specific example would be REJECTED
 ```
-(Shown to make the mechanics concrete, including a realistic failure — Tier B's
-larger risk budget still has to clear R:R ≥ 1.8 and buying power like anything
-else. A trade only proceeds if every check passes, same as Tier A.)
+(Shown to make the mechanics concrete, including a realistic failure — the
+elevated risk budget still has to clear R:R ≥ 1.8 and buying power like
+anything else. A trade only proceeds if every check passes.)
 
 ## Sentiment & market-regime gate (check before ANY new long)
 
@@ -319,14 +301,14 @@ setup in a bad tape still fails. Before opening a new long, confirm the mood:
   lower-confidence and size down or skip — don't fight a falling market.
 - **Comparative strength (Wyckoff stock selection):** prefer names **outperforming
   SPY** over the range for longs (relative strength), underperformers for shorts.
-  For GLD specifically, gold often *leads* when fear rises — that divergence from
-  SPY is itself a bullish tell.
+  Commodity-linked names (GDX, USO, XLE) diverging *stronger* than SPY when
+  broad-market fear rises is itself a bullish tell for that name.
 - **Retail-crowding proxy (optional):** `get_popular_watchlists` /
   `get_equity_fundamentals` volume vs. float can hint whether the "mob" is already
   crowded in. Heavy, euphoric retail crowding near resistance argues *distribution*,
   not accumulation.
 
-Record the regime read in the plan ("VIX 18 falling, SPY neutral, GLD RS+"). If the
+Record the regime read in the plan ("VIX 18 falling, SPY neutral, GDX RS+"). If the
 gate says risk-off, the day's answer is **no new long** — say so and stop.
 
 ## Backtesting & validation (script-free — how we know it has worked)
@@ -362,42 +344,37 @@ change, not just as edge changes):
 
 | Symbol | Trades | Win% | Total R | PF | Outlier-dep? | Verdict |
 |---|---|---|---|---|---|---|
-| GLD | 5 | 60% | +9.1R | 8.40 | No | ✅ Approved |
-| SPY | 17 | 41% | +9.0R | 1.90 | No | ✅ Approved |
 | USO | 7 | 57% | +9.3R | 4.09 | No | ✅ Approved |
 | GDX | 8 | 38% | +7.4R | 2.48 | No | ✅ Approved (provisional — was Watch-only) |
-| QQQ | 15 | 40% | +8.0R | 1.88 | No | ✅ Approved (provisional — newly reviewed) |
-| IWM | 13 | 46% | +3.6R | 1.51 | No | ✅ Approved (provisional — newly reviewed, weakest PF) |
 | XLE | 8 | 50% | +8.0R | 3.00 | No | ✅ Approved (provisional — newly reviewed) |
 | SLV | 6 | 17% | +0.4R | 1.07 | **Yes** | ❌ Excluded |
 
-Previous baseline (2026-07, ~3.5yr window) for reference: GLD 12/50%/+9.2R,
-SPY 34/44%/+20.8R, USO 12/58%/+10.2R, GDX 21/29%/+11.7R (outlier-dependent then),
-SLV 10/20%/−3.4R, QQQ/IWM/XLE not yet reviewed.
+**Removed from this table 2026-08-13** along with the universe cut above: GLD
+(5 trades, 60%, +9.1R), SPY (17, 41%, +9.0R), QQQ (15, 40%, +8.0R), IWM (13,
+46%, +3.6R) — all had a positive edge in backtest, the removal was purely about
+share-price affordability on this account size, not strategy quality. Full
+numbers are in git history if reconsidered later.
 
-**Caveat on this review:** all "provisional" trade counts are small (8–17
-trades) — treat the classification as directional, not statistically strong.
-GDX's outlier-dependence flipped between reviews (window length + a simplified
-ATR estimate can both shift which bars qualify); size the four provisional
-symbols cautiously until each has cleared at least one live trigger.
+**Caveat on this review:** GDX and XLE's trade counts are small (8 each) —
+treat the classification as directional, not statistically strong. GDX's
+outlier-dependence flipped between reviews (window length + a simplified ATR
+estimate can both shift which bars qualify); size both provisional symbols
+cautiously until each has cleared at least one live trigger.
 
 ## Step 7 — Present the plan (then STOP and wait)
 
 Show a compact summary and wait for a decision. Example:
 
 ```
-GLD — SPRING in an accumulation range
-  support 68.00 / resistance 77.50 (height 9.50) · ATR 1.30
+USO — SPRING in an accumulation range
+  support 68.00 / resistance 77.50 (height 9.50) · ATR 1.30 · equity 248
   trigger: spring @ 66.90 wick, closed 68.60 · dry-up volume (0.5× avg)
   entry model: TEST-CONFIRMED close back above support
   confirms (3/4): RSI divergence 38 vs 22 · OBV held · volume dry-up
   entry ~68.60 · thesis-exit on close < 66.90 · broker stop 65.92 · R:R 3.3
   targets 77.50 / 87.00
-  size (Tier A, 0.10% risk): 3 shares (~$206, 2.1% of equity)
+  size (2% risk): 1 share (~$68.60, 27.7% of equity)
   => ACTIONABLE. Place it?
-```
-(For a Tier B symbol — GDX/USO/XLE — state the tier and risk fraction the same
-way, e.g. "size (Tier B, 2% risk): 1 share (~$84, 34% of equity)".)
 ```
 
 If any rule fails, say which one and mark it **advisory only** — do not place.
@@ -445,8 +422,7 @@ Every stop adjustment is an order change → same **review → confirm → place
 - Never place/cancel an order without explicit per-order confirmation.
 - Never use a naked market order — always a marketable **limit** (price protection).
 - Never trade a non-`agentic_allowed` account.
-- Never exceed the sizing-tier caps for that symbol, or trade through the daily kill switch.
-- Never apply Tier B's risk fraction to a Tier A symbol, or vice versa.
+- Never exceed the sizing caps, or trade through the daily kill switch.
 - Never enter without a protective stop placed.
 - Never trade a symbol that isn't in the **Approved** set.
 - **Never chase the wick** — no entry while price is spiking intraday below
@@ -455,13 +431,15 @@ Every stop adjustment is an order change → same **review → confirm → place
   always below the spring low with the ATR buffer.
 - **Never tighten the stop into the wick zone to buy more shares** — size follows
   the stop, not the reverse.
-- Never change the sizing-tier assignments or risk fractions without an explicit
-  human instruction to do so.
+- Never keep a symbol in the universe purely for analysis if it structurally
+  cannot clear a nonzero share count on this account's current sizing — cut it
+  (see "Universe & watchlist"). Never change the risk fraction or add back a
+  removed symbol without an explicit human instruction to do so.
 - This is **not financial advice**; markets can lose money. When unsure, ask.
 
 ## Quick manual run
 
-When the human says **"check GLD"** (or names another symbol): do Steps 1–7 and
+When the human says **"check GDX"** (or names another symbol): do Steps 1–7 and
 present the plan. Do **not** proceed to Step 8 (placing orders) until they say yes.
 
 ---
@@ -494,10 +472,9 @@ reply. Only the human can approve a real trade.
 - **Trades?** Only after the human replies "yes" to the staged plan.
 - **Does:** account + portfolio check → propose position-management actions
   (break-even move, trail, partial at target, thesis-stop exit) → sentiment gate →
-  pick at most **one** best Approved-set setup passing all Step 6 caps for its
-  **sizing tier** (Tier A: GLD/SPY/QQQ/IWM, will keep rounding to 0 shares until
-  funded; Tier B: GDX/USO/XLE, the only symbols that can currently execute) →
-  call `review_equity_order` to get real cost/alerts → present ONE plan and stop.
+  pick at most **one** best Approved-set setup (USO, GDX, XLE) passing all
+  Step 6 caps, including the buying-power precondition → call
+  `review_equity_order` to get real cost/alerts → present ONE plan and stop.
   **Only on explicit approval** does it place the limit entry and the protective
   stop, per Step 8.
 
@@ -506,10 +483,12 @@ reply. Only the human can approve a real trade.
 - **When:** Sunday 5:00 PM ET (`0 21 * * 0` UTC)
 - **Trades?** No — review and validation only.
 - **Does:** summarize the week's P&L and open positions against their theses; run
-  the script-free Backtesting & Validation procedure above for GLD, SPY, USO,
-  GDX, SLV, QQQ, IWM, XLE; update the Universe table's Approved / Watch-only /
-  Excluded classification (edit this file if it changed); refresh "Wyckoff Watch";
-  report the week ahead.
+  the script-free Backtesting & Validation procedure above for USO, GDX, XLE,
+  SLV; update the Universe table's Approved / Watch-only / Excluded
+  classification (edit this file if it changed); refresh "Wyckoff Watch";
+  report the week ahead. (GLD/SPY/QQQ/IWM were removed from the universe
+  2026-08-13 for share-price affordability, not edge — see "Universe &
+  watchlist." Don't re-add them without an explicit human instruction.)
 
 If a routine ever reports it lacks Robinhood tools, the connector didn't attach
 to that firing — tell the human so they can re-check the session's connector

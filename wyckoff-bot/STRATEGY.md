@@ -189,12 +189,21 @@ where institutional campaigns and crowd phases are visible and where false
 signals are fewest. Trade daily; use weekly for context. Avoid intraday until
 the daily process is proven.
 
-**Recommended starter universe** (live on Robinhood as the "Wyckoff Watch"
-watchlist, and tracked in `CLAUDE.md`'s Universe table): `SPY, QQQ, IWM, GLD,
-SLV, USO, GDX, XLE` — a mix of index and commodity ETFs, all liquid, all
-crowd-driven, none dependent on single-company headline risk. Each symbol is
-individually validated (see CLAUDE.md's Backtesting & Validation section) before
-being promoted to the Approved-for-execution set.
+**Recommended starter universe:** `SPY, QQQ, IWM, GLD, SLV, USO, GDX, XLE` — a
+mix of index and commodity ETFs, all liquid, all crowd-driven, none dependent
+on single-company headline risk. Each symbol is individually validated (see
+CLAUDE.md's Backtesting & Validation section) before being promoted to the
+Approved-for-execution set.
+
+**Live universe is currently a subset of this** (tracked in `CLAUDE.md`'s
+Universe table: `USO, GDX, XLE`, plus `SLV` excluded for analysis reference).
+`SPY, QQQ, IWM, GLD` were removed 2026-08-13 — not because the method doesn't
+apply to them (it does, and they backtested positively), but because their
+share prices are too high for this account's sizing to ever clear a nonzero
+position: tracking symbols that can structurally never execute wastes analysis
+effort and produces no live data to validate the strategy against. If the
+account is funded significantly larger in the future, they're reasonable
+candidates to re-add.
 
 Sources: [Wyckoff Analytics — Swing Trading Using the Wyckoff Method](https://www.wyckoffanalytics.com/demand/swing-trading-using-the-wyckoff-method/),
 [Nasdaq — ETF Liquidity](https://www.nasdaq.com/articles/etf-liquidity-what-actually-drives-trading-capacity),

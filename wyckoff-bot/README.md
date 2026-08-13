@@ -41,10 +41,14 @@ Full research, event definitions, and the safety/instrument-selection rationale:
 
 | Symbol | Status |
 |---|---|
-| GLD, SPY, USO | ✅ Approved for execution |
-| GDX | ⚠️ Watch-only |
+| USO | ✅ Approved for execution |
+| GDX, XLE | ✅ Approved (provisional) |
 | SLV | ❌ Excluded (failed validation) |
-| QQQ, IWM, XLE | ⏳ Unvalidated |
+
+`GLD, SPY, QQQ, IWM` were removed from the universe 2026-08-13 — their share
+prices are too high for this account's sizing to ever clear a nonzero
+position, so tracking them wasted analysis effort for zero possible trades.
+Not a statement on their Wyckoff edge (see STRATEGY.md).
 
 This table is refreshed by the Sunday routine; the authoritative copy lives in
 CLAUDE.md's Universe section.
@@ -55,8 +59,10 @@ CLAUDE.md's Universe section.
   dry-up + close rejection** (raw momentum is meaningless at a reversal);
   breakouts require **momentum/trend alignment**. A trigger is only *actionable*
   after clearing confidence, confirmation-count, and reward:risk floors.
-- **Testing-mode sizing:** 0.10% of equity risked per trade, ≤5% per name, ≤3
-  open positions, ≤0.5% total open risk, −1.5%/day kill switch.
+- **Sizing:** 2% of equity risked per trade (elevated to clear the whole-share
+  floor on a small account), ≤50% per name, ≤1 open position at a time, ≤2%
+  total open risk, −1.5%/day kill switch, plus a buying-power precondition
+  before staging.
 - **Two-layer stop-loss:** an agent-managed thesis stop on a daily close (so
   intraday wicks don't fake you out) plus an always-live broker catastrophe stop
   placed below the wick zone.
