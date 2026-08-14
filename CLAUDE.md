@@ -51,12 +51,24 @@ wired into the app) is done and proven:
   and reassuring: OCCT's volume is the true analytic value of a real circle, while the mesh
   kernel approximates circles with 48-sided polygons — OCCT is the more accurate one).
 
-Not done yet (this is Phase 1 of 4 — see docs/ARCHITECTURE.md roadmap): revolve, booleans,
-primitives, patterns, mirror, holes/multi-entity sketches, loft, shell, draft in the OCCT
-evaluator; nothing is wired into the client viewport or the AI agent yet (still 100% the
-mesh-CSG kernel in the running app — this spike changes nothing the user can see). Next: expand
-OCCT feature coverage to match the full schema, verified the same way each time (analytic
-cross-checks, not just "no errors thrown").
+**Phase 2 done and proven**: multi-entity sketches with holes (fuse solid entities, cut hole
+entities, as 2D `Drawing` ops before `sketchOnPlane`), extrude combined with an existing body
+(join/cut/intersect via `.fuse()`/`.cut()`/`.intersect()`), the standalone `combine` feature,
+and box/cylinder primitives (no `makeBox`/`makeCylinder` shortcuts exist in this installed
+replicad build despite the docs — same docs/runtime mismatch pattern as `.volume` in Phase 1 —
+so primitives are built the same way as everything else: sketch + extrude). 3D rotation uses
+`.rotate(angleDeg, [0,0,0], axisVector)` applied three times in sequence (X then Y then Z) to
+match our `rotate: [rx,ry,rz]` Euler-XYZ convention — replicad's rotate takes an angle+axis, not
+an Euler triple. Cross-validated by fully reproducing `projects/demo/mounting-bracket.cad.json`
+(2 holes, a joined box flange, a rotated-and-cut cylinder) — OCCT volume matches the mesh-CSG
+kernel within 0.01%.
+
+Not done yet (Phase 2 of 4 continues — see docs/ARCHITECTURE.md roadmap): revolve, patterns,
+mirror, transform, loft, shell, draft. Nothing is wired into the client viewport or the AI agent
+yet (still 100% the mesh-CSG kernel in the running app — this spike changes nothing the user can
+see). Next: revolve and mirror/transform are the natural next increment (patterns/loft/shell/
+draft can mostly reuse them), verified the same way each time (analytic cross-checks, not just
+"no errors thrown").
 
 ## Current AI backend: local Ollama, not a cloud API
 

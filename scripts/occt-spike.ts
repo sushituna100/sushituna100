@@ -1,10 +1,10 @@
 /**
- * Phase 1 proof-of-concept: evaluate simple test documents through BOTH the
- * existing mesh-CSG kernel and the new OCCT spike evaluator, and compare
- * volumes. Close agreement is strong evidence the OCCT integration
- * fundamentals (WASM init, sketch, extrude, tessellation, volume) are
- * correct in this Node environment. See CLAUDE.md "B-rep migration".
+ * Phase 1+2 proof-of-concept: evaluate test documents through BOTH the
+ * existing mesh-CSG kernel and the new OCCT evaluator, and compare volumes.
+ * Close agreement is strong evidence the OCCT integration is correct.
+ * See CLAUDE.md "B-rep migration".
  */
+import fs from "node:fs";
 import * as THREE from "three";
 import { evaluateDocument } from "../src/kernel/evaluate";
 import type { CadDocument } from "../src/kernel/types";
@@ -42,9 +42,13 @@ const cylinder: CadDocument = {
   ],
 };
 
+const mountingBracket: CadDocument = JSON.parse(
+  fs.readFileSync("projects/demo/mounting-bracket.cad.json", "utf8"),
+);
+
 let allPass = true;
 
-for (const doc of [rectBox, cylinder]) {
+for (const doc of [rectBox, cylinder, mountingBracket]) {
   console.log(`\n=== ${doc.name} ===`);
   const mesh = evaluateDocument(doc);
   const occt = await evaluateDocumentOcct(doc);
@@ -52,14 +56,17 @@ for (const doc of [rectBox, cylinder]) {
   if (mesh.errors.length) console.log("mesh-CSG errors:", mesh.errors);
   if (occt.errors.length) console.log("OCCT errors:", occt.errors);
 
-  const meshVol = mesh.bodies[0] ? computeMeshVolume(mesh.bodies[0].geometry) : NaN;
-  const occtVol = occt.bodies[0]?.volume ?? NaN;
+  const meshBody = mesh.bodies.find((b) => b.id === (doc.name === "mounting-bracket" ? "ex_base" : "ex1")) ?? mesh.bodies[0];
+  const occtBody = occt.bodies.find((b) => b.id === meshBody?.id) ?? occt.bodies[0];
+
+  const meshVol = meshBody ? computeMeshVolume(meshBody.geometry) : NaN;
+  const occtVol = occtBody?.volume ?? NaN;
   const pctDiff = (Math.abs(meshVol - occtVol) / meshVol) * 100;
 
   console.log(`mesh-CSG volume: ${meshVol.toFixed(4)} mm^3`);
   console.log(`OCCT volume:     ${occtVol.toFixed(4)} mm^3`);
   console.log(`difference:      ${pctDiff.toFixed(4)}%`);
-  console.log(`OCCT triangles:  ${occt.bodies[0]?.triangles.length ? occt.bodies[0].triangles.length / 3 : 0}`);
+  console.log(`OCCT triangles:  ${occtBody?.triangles.length ? occtBody.triangles.length / 3 : 0}`);
 
   if (!(pctDiff < 0.5)) {
     allPass = false;
