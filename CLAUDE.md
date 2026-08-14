@@ -27,6 +27,37 @@ well on triangle meshes — don't attempt them here. The real path is swapping t
 through the `replicad` TypeScript API on top of it, behind the same document schema — this is
 a substantial, separate project, not an incremental patch to `evaluate.ts`.
 
+### B-rep migration status (in progress)
+
+Decision made: commit to the OpenCascade/replicad path rather than continuing to patch the
+mesh-CSG kernel, even though it's a multi-session effort. Phase 1 (server-side spike, not
+wired into the app) is done and proven:
+
+- `server/occt/init.ts` — one-time WASM init. Gotcha found and fixed: the Emscripten-generated
+  loader (`replicad-opencascadejs`) assumes CommonJS and references the bare `__dirname`
+  global to locate its `.wasm` file, which doesn't exist under Node's ESM loader (this project
+  is `"type": "module"`). Fixed by polyfilling `globalThis.__dirname` before invoking the
+  factory, rather than patching the generated file. Init takes ~1s.
+- `server/occt/evaluate.ts` — minimal evaluator: single rect/circle sketch entity + one
+  extrude (`op: "new"` only), using `drawRoundedRectangle`/`drawCircle` → `.sketchOnPlane()` →
+  `.extrude()` → `.mesh()`. **The installed `replicad` 0.23.1 bundle's runtime prototype chain
+  does NOT match its own `.d.ts`** — `Solid.volume` is documented but doesn't exist at runtime
+  (confirmed by walking the actual prototype chain: `Solid → _3DShape → Shape → WrappingObj`,
+  no `volume` anywhere). Use the exported `measureVolume(shape)` / `measureShapeVolumeProperties(shape)`
+  functions instead (real `GProp_GProps`/`BRepGProp.VolumeProperties` OpenCascade calls) — verify
+  against the actual bundled `.js`, not just the `.d.ts`, before trusting any replicad API surface.
+- `scripts/occt-spike.ts` — cross-validates OCCT volume against the existing mesh-CSG kernel on
+  a rect box and a cylinder. Both agree to within 0.04% (the cylinder's tiny gap is *expected*
+  and reassuring: OCCT's volume is the true analytic value of a real circle, while the mesh
+  kernel approximates circles with 48-sided polygons — OCCT is the more accurate one).
+
+Not done yet (this is Phase 1 of 4 — see docs/ARCHITECTURE.md roadmap): revolve, booleans,
+primitives, patterns, mirror, holes/multi-entity sketches, loft, shell, draft in the OCCT
+evaluator; nothing is wired into the client viewport or the AI agent yet (still 100% the
+mesh-CSG kernel in the running app — this spike changes nothing the user can see). Next: expand
+OCCT feature coverage to match the full schema, verified the same way each time (analytic
+cross-checks, not just "no errors thrown").
+
 ## Current AI backend: local Ollama, not a cloud API
 
 The copilot originally used the Anthropic API directly. It now runs entirely against a
