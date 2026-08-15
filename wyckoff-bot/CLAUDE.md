@@ -8,10 +8,27 @@ the scheduled routines are all defined here.
 
 ## The golden rule
 
-**You propose. The human confirms. Only then do you place an order.** Never place
-or cancel an order without an explicit "yes" for that specific order in this
-conversation. "Run the check" / "look at GDX" is permission to *analyze*, never
-to trade. When in doubt, stop and ask.
+**You decide. The gatekeeper executes.** This account (746754522) is shared with
+other autonomous strategies and mediated by a dedicated coordination repo,
+`sushituna100/trading-ledger-gatekeeper` — see "Writing a proposal to the
+gatekeeper" below. As of 2026-08-15 this program runs **fully autonomously on its
+own schedule**: no human confirmation gates a scheduled entry or exit decision
+anymore. You never call `place_equity_order`/`review_equity_order` yourself for a
+new entry or a deliberate exit (thesis-stop close, break-even/target/reversal
+sell) — you write a **proposal** instead, and the gatekeeper session validates
+and executes it. The one exception, matching how the other strategies on this
+account work: **maintaining an already-resting protective stop on a position you
+already hold** (the Layer 2 catastrophe stop, trailing it under a new LPS, moving
+it to breakeven) stays direct against the broker — it's risk reduction on capital
+already committed to this strategy, not a new commitment, and shouldn't wait on
+the gatekeeper's hourly cadence. A **new** position's initial catastrophe stop is
+instead placed automatically by the gatekeeper itself, immediately after your buy
+proposal fills — you don't place it.
+
+"Run the check" / "look at GDX" outside a scheduled run is still just analysis —
+report what you see, and if it's actionable, say so, but a manual chat request
+doesn't itself submit a proposal; only the scheduled routines (or an explicit
+"submit that" from the human in the moment) do.
 
 ## Position sizing (current — do not change without explicit instruction)
 
@@ -45,12 +62,30 @@ still tracked and why even that isn't guaranteed to be affordable today.
 These caps are enforced in Step 6 and the routines below. Change them only when
 the human explicitly says so.
 
-**Note on shared account exposure:** this account may run other automated
-strategies (other watchlists on it are marked "auto-maintained by" other bots).
-`get_realized_pnl` / `get_equity_positions` reflect the **whole account**, not
-just Wyckoff trades — so the kill switch and position-count cap above are
-conservatively account-wide, not Wyckoff-only. If they block a trade, say so
-plainly rather than assuming it's a Wyckoff-side issue.
+**Note on shared account exposure:** this account runs other automated
+strategies — confirmed as of 2026-08-15: Small-Cap Catalyst Drift
+(`sushituna100/claude-trading-bot-sentiment`), fully autonomous, currently
+holding 4 positions (TCBX, SHIP, UFCS, MLR) worth ~$207 of the account's ~$256
+total equity. `get_realized_pnl` / `get_equity_positions` reflect the **whole
+account**, not just Wyckoff trades — so the kill switch and position-count cap
+above are conservatively account-wide, not Wyckoff-only. If they block a trade,
+say so plainly rather than assuming it's a Wyckoff-side issue.
+
+**Capital reality, current as of 2026-08-15:** the account has not received the
+separate deposit once discussed for this strategy — real settled cash today is
+Catalyst Drift's, not a dedicated Wyckoff allocation. The gatekeeper's
+`ledger.json` reflects this honestly: Wyckoff's `cash_available` is **$0** until
+that deposit lands and the owner tells the gatekeeper how to split it. This
+strategy is now mechanically autonomous (no human "yes" required) and will
+compute and submit real proposals per its own signal logic — but every buy
+proposal will come back `insufficient_capital` from the gatekeeper until funded.
+That's expected, not a bug: log it plainly, same as any other rejection. Do not
+size against the whole account's `get_portfolio` equity as if it were available
+to Wyckoff — it isn't; it's Catalyst Drift's. Once a real Wyckoff allocation
+exists in `ledger.json`, size against **that** figure instead (ask the gatekeeper
+repo's `ledger.json` for `strategies.wyckoff.cash_available`/`allocated_capital`
+each run, the same way Catalyst Drift already treats its own ledger slice as
+authoritative for sizing).
 
 ## Universe & watchlist
 
@@ -361,65 +396,79 @@ outlier-dependence flipped between reviews (window length + a simplified ATR
 estimate can both shift which bars qualify); size both provisional symbols
 cautiously until each has cleared at least one live trigger.
 
-## Step 7 — Present the plan (then STOP and wait)
+## Step 7 — Log the plan
 
-Show a compact summary and wait for a decision. Example:
+Write a compact summary in the run's report — no waiting, no human gate. Example:
 
 ```
 USO — SPRING in an accumulation range
-  support 68.00 / resistance 77.50 (height 9.50) · ATR 1.30 · equity 248
+  support 68.00 / resistance 77.50 (height 9.50) · ATR 1.30
   trigger: spring @ 66.90 wick, closed 68.60 · dry-up volume (0.5× avg)
   entry model: TEST-CONFIRMED close back above support
   confirms (3/4): RSI divergence 38 vs 22 · OBV held · volume dry-up
   entry ~68.60 · thesis-exit on close < 66.90 · broker stop 65.92 · R:R 3.3
   targets 77.50 / 87.00
-  size (2% risk): 1 share (~$68.60, 27.7% of equity)
-  => ACTIONABLE. Place it?
+  size (2% risk against Wyckoff's ledger allocation): 1 share (~$68.60)
+  => ACTIONABLE. Submitting proposal wy-YYYYMMDD-NNN to the gatekeeper.
 ```
 
-If any rule fails, say which one and mark it **advisory only** — do not place.
+If any rule fails, say which one and mark it **rejected** — do not submit a
+proposal for it. If the *only* failure is `insufficient_capital` (Wyckoff's
+`cash_available` in the gatekeeper ledger is $0, per the capital-reality note
+above), still log the setup as fully qualified and note it was withheld purely
+for lack of allocated capital — that's a meaningfully different outcome from a
+signal that failed the Wyckoff/Step-4/Step-6 checks, worth distinguishing in the
+log so a future funded run's track record isn't confused with a rejected-signal
+track record.
 
-## Step 8 — Execute (only after an explicit "yes")
+## Step 8 — Submit the proposal to the gatekeeper
 
-1. `review_equity_order(account_number, symbol, side="buy", type="limit",
-   quantity=<shares>, limit_price=<entry>, time_in_force="gfd")` → relay the
-   estimated cost and any alerts.
-2. On confirmation: `place_equity_order(… same params …, ref_id=<fresh UUID>)`.
-   Reuse the same `ref_id` only to retry a transient failure of the same order.
-3. As soon as the entry fills (`get_equity_orders`), place the **catastrophe
-   stop** (Layer 2): `place_equity_order(account_number, symbol, side="sell",
-   type="stop_market", quantity=<filled>, stop_price=<raw_stop>,
-   time_in_force="gtc", ref_id=<fresh UUID>)`. **A position without a live stop is
-   not allowed — if the stop fails to place, exit the position.**
-   - Optional finer control: use `stop_limit` with `stop_price=raw_stop` and a
-     `limit_price` ~0.3×ATR below it, so a crash doesn't fill you far through the
-     stop — accepting that a violent gap could skip the limit.
-4. Record the **Layer 1 thesis level** (close < spring_low) so the next run
-   checks it.
+No human confirmation step. If Step 7 concluded ACTIONABLE:
+
+1. Write the proposal per "Writing a proposal to the gatekeeper" below instead of
+   calling `place_equity_order` yourself.
+2. Do **not** place the catastrophe stop (Layer 2) yourself for a new entry — the
+   gatekeeper rests it automatically immediately after the buy proposal fills
+   (its own `CLAUDE.md` validation step 6). Record the **Layer 1 thesis level**
+   (close < spring_low) and the intended Layer-2 `raw_stop` value in the
+   proposal's `stop` field so the gatekeeper has it.
+3. Treat the proposal as **submitted, not filled**. A later run confirms the
+   outcome via the gatekeeper's `proposals/approved/`/`proposals/rejected/`
+   (see "Checking proposal outcomes" below) before logging it as a real position.
 
 ## Step 9 — Manage open positions (every run, on daily closes)
 
 Check these in order for each open position:
 
 - **Thesis stop (Layer 1):** did a daily bar **close below the spring low**? If
-  yes → propose exiting next session (cancel the broker stop, sell). This is the
-  primary, wick-resistant exit.
+  yes → write a **sell proposal** for the full position (thesis-invalidation
+  exit, no waiting for the next session). This is the primary, wick-resistant
+  exit.
 - **Break-even move:** once price closes at **entry + 1R** (one risk unit above
-  entry), propose raising the broker stop to **break-even** (entry). Now the trade
-  is risk-free.
+  entry), move the resting broker stop to **break-even** (entry) directly — this
+  is stop-maintenance on a position already held, not a proposal.
 - **Trail:** after an SOS/markup, trail the broker stop **under each new higher
-  low (LPS)**, not under obvious support — same wick logic as the entry stop.
-- **Target 1:** at range resistance, propose selling **half** and trailing the
-  rest toward Target 2 (measured move).
-- **Reversal:** an **Upthrust/UTAD or SOW** on a held name → propose a full exit.
-- **Accounting:** if any stop/exit filled, confirm it via `get_equity_orders`/
+  low (LPS)** directly, not under obvious support — same wick logic as the entry
+  stop, same direct-order exception.
+- **Target 1:** at range resistance, write a **sell proposal** for **half** the
+  position; move the stop on the remainder toward Target 2 directly (stop
+  maintenance).
+- **Reversal:** an **Upthrust/UTAD or SOW** on a held name → write a **sell
+  proposal** for a full exit.
+- **Accounting:** if any stop/exit filled (broker-triggered, or a submitted sell
+  proposal the gatekeeper executed), confirm it via `get_equity_orders`/
   `get_equity_positions` and update today's realized P&L for the kill switch.
 
-Every stop adjustment is an order change → same **review → confirm → place** gate.
+New sells (thesis stop, target, reversal) → proposal, per Step 8. Stop
+maintenance on a position already held (break-even move, trailing) → direct,
+same exception as new-entry catastrophe stops.
 
 ## Hard rules (never do)
 
-- Never place/cancel an order without explicit per-order confirmation.
+- Never call `place_equity_order`/`review_equity_order` for a new entry or a
+  deliberate sell decision — write a proposal to the gatekeeper instead
+  (exception: maintaining an already-resting protective stop on a position
+  already held, per the golden rule above).
 - Never use a naked market order — always a marketable **limit** (price protection).
 - Never trade a non-`agentic_allowed` account.
 - Never exceed the sizing caps, or trade through the daily kill switch.
@@ -439,8 +488,50 @@ Every stop adjustment is an order change → same **review → confirm → place
 
 ## Quick manual run
 
-When the human says **"check GDX"** (or names another symbol): do Steps 1–7 and
-present the plan. Do **not** proceed to Step 8 (placing orders) until they say yes.
+When the human says **"check GDX"** (or names another symbol) outside a scheduled
+run: do Steps 1–7 and present the plan. This is analysis-on-request, not a
+scheduled entry decision — don't auto-submit a proposal from a manual check
+unless the human explicitly says to (e.g. "submit that" / "go ahead"). Scheduled
+routines below always proceed straight through Step 8 with no such pause.
+
+## Writing a proposal to the gatekeeper
+
+1. `cd /workspace/trading-ledger-gatekeeper` (clone if missing:
+   `git clone https://github.com/sushituna100/trading-ledger-gatekeeper
+   /workspace/trading-ledger-gatekeeper` — this session's push credential is
+   already scoped to that repo). `git pull`.
+2. Write `proposals/pending/wy-YYYYMMDD-NNN.json` (`NNN` = 001, 002, … for
+   further proposals the same day) with the exact fields in that repo's
+   `docs/proposal-schema.md`: `proposal_id`, `strategy: "wyckoff"`, `symbol`,
+   `side`, `quantity`, `order_type: "limit"`, `limit_price` (marketable limit,
+   never a naked market order), `stop` (the Layer-2 `raw_stop` value on a buy),
+   `target` (Target 1 on a buy), `thesis` (one sentence — setup type, trigger
+   grade, confirmations, R:R), `proposed_at` (ISO 8601 UTC, now).
+3. `git add proposals/pending/<file> && git commit -m "propose: wy-YYYYMMDD-NNN
+   <SYMBOL> <side>" && git push`.
+4. Call `fire_trigger` on `trig_01JBfjTu2dPk5bRnWpVq3rr8` (the gatekeeper's
+   hourly Routine) so it processes this proposal now rather than waiting up to an
+   hour. If `fire_trigger` errors, that's fine — the proposal sits in `pending/`
+   and the hourly cadence picks it up; log the failure as a minor note.
+5. Do not treat the proposal as executed. The gatekeeper session calls
+   `review_equity_order`/`place_equity_order`, not this one.
+
+## Checking proposal outcomes (every scheduled run, before scanning)
+
+`cd /workspace/trading-ledger-gatekeeper && git pull`, then check
+`proposals/approved/` and `proposals/rejected/` for any `wy-` prefixed file not
+yet reflected in this session's own understanding of its positions:
+
+- **Approved:** the fill (price, timestamp) and the gatekeeper's own resting of
+  the Layer-2 stop are in the `outcome` block. Treat the position as now open;
+  record the Layer-1 thesis level (spring low) for Step 9's ongoing checks.
+- **Rejected:** read `rejected_reason`. `insufficient_capital` is the expected,
+  routine outcome until Wyckoff has a real ledger allocation (see "Capital
+  reality" above) — log it plainly, don't resubmit the same proposal hoping for
+  a different result. `symbol_conflict` means another strategy already holds
+  that symbol in the shared ledger — drop the candidate, it's not tradeable
+  regardless of setup quality. `malformed` means this session's own
+  proposal-writing has a bug — flag it, don't paper over it.
 
 ---
 
@@ -453,9 +544,14 @@ already attached (a fresh session does not reliably inherit it). This means the
 conversation keeps growing over time — that's expected; older context gets
 summarized automatically.
 
-**Execution mode: propose-and-confirm.** The execute routine stages orders and
-waits — it never places anything without an explicit "yes" from the human in
-reply. Only the human can approve a real trade.
+**Execution mode: autonomous, gatekeeper-mediated (since 2026-08-15).** The
+execute routine decides, submits a proposal to the gatekeeper, and moves on — no
+human confirmation gates it anymore. See "The golden rule" and "Writing a
+proposal to the gatekeeper" above. This is a real reduction in the safety net
+that existed before (a human reviewing every order) — the operative safety net
+now is the same one every other strategy on this account relies on: the sizing
+caps and kill switch in this file, self-checked here and re-checked
+independently by the gatekeeper before any order is real.
 
 ### 1. Daily Scan → Watchlist
 
@@ -466,17 +562,20 @@ reply. Only the human can approve a real trade.
   that no longer qualify), note the sentiment/regime read, and report the top 1–2
   candidates.
 
-### 2. Daily Execute — Propose & Confirm
+### 2. Daily Execute — Autonomous (Gatekeeper-Mediated)
 
 - **When:** weekdays 9:45 AM ET, just after the open (`45 13 * * 1-5` UTC)
-- **Trades?** Only after the human replies "yes" to the staged plan.
-- **Does:** account + portfolio check → propose position-management actions
-  (break-even move, trail, partial at target, thesis-stop exit) → sentiment gate →
-  pick at most **one** best Approved-set setup (USO, GDX, XLE) passing all
-  Step 6 caps, including the buying-power precondition → call
-  `review_equity_order` to get real cost/alerts → present ONE plan and stop.
-  **Only on explicit approval** does it place the limit entry and the protective
-  stop, per Step 8.
+- **Trades?** Yes, autonomously — no human reply required.
+- **Does:** check gatekeeper proposal outcomes since last run (above) → account +
+  portfolio check → direct stop-maintenance actions on open positions
+  (break-even move, trail) and sell proposals for thesis-stop/target/reversal
+  exits, per Step 9 → sentiment gate → pick at most **one** best Approved-set
+  setup (USO, GDX, XLE) passing all Step 6 caps, including the capital
+  precondition against Wyckoff's actual `cash_available` in the gatekeeper
+  ledger (not whole-account buying power) → log the plan (Step 7) → submit the
+  buy proposal and `fire_trigger` the gatekeeper (Step 8). No pause, no wait —
+  the run ends once the proposal is submitted (or logs "no action" if nothing
+  qualified, including "qualified but capital-gated at $0").
 
 ### 3. Sunday Runbook + Validation
 
